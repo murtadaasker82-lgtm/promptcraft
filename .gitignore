@@ -1,0 +1,54 @@
+# ====== البيئة والأسرار ======
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# ====== Python ======
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ====== قاعدة البيانات والملفات المرفوعة ======
+# نتجاهل محتوى data/ لكن نبقي المجلد نفسه
+data/*
+!data/.gitkeep
+*.db
+*.db-shm
+*.db-wal
+*.sqlite3
+
+# ====== ملفات الاختبار المؤقتة ======
+.pc-test-*
+.pc-big.*
+.pc-empty.*
+.pc-dur.*
+cookies.txt
+test-results/
+
+# ====== المجلدات الفارغة (نُبقي عليها في Git) ======
+!static/.gitkeep
+!templates/.gitkeep
+
+# ====== الأدوات والكاش ======
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ====== المحررات ونظام التشغيل ======
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

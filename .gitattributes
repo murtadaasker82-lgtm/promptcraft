@@ -1,0 +1,26 @@
+# ==========================================================
+#  PromptCraft — قواعد نهاية الأسطر
+#  الغرض: نفس الملفات على ويندوز ولينكس/ماك (خاصة سكريبتات bash)
+# ==========================================================
+
+# افتراضي: أرسل LF، واستقبل LF على كل الأنظمة
+* text=auto eol=lf
+
+# ملفات يجب أن تكون LF دائمًا (تعمل مع bash)
+*.sh    text eol=lf
+Dockerfile text eol=lf
+.gitattributes text eol=lf
+.gitignore     text eol=lf
+
+# ملفات ثنائية
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.mp3  binary
+*.mp4  binary
+*.wav  binary
+*.db   binary
+*.sqlite3 binary

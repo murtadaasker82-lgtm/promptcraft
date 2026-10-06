@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} — {{ app_name }}</title>
+
+    <!-- TailwindCSS عبر CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Cairo', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            50: '#eef4ff', 100: '#d9e6ff', 200: '#bcd3ff',
+                            300: '#8eb6ff', 400: '#598eff', 500: '#3366ff',
+                            600: '#1f43f5', 700: '#1a31e1', 800: '#1c2cb6',
+                            900: '#1d2d8f',
+                        },
+                    },
+                },
+            },
+        };
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="/static/css/style.css">
+
+    <!-- إعدادات الصفحة — تُقرأ في app.js قبل تشغيل Alpine -->
+    <script>
+        window.__PC_CONFIG__ = {
+            user: { id: {{ auth_user.id }}, username: {{ auth_user.username | tojson }} },
+            max_upload_mb: {{ max_upload_mb }},
+            allowed_extensions: {{ allowed_extensions | tojson }},
+            transcribe_ready: {{ transcribe_ready | tojson }},
+        };
+    </script>
+
+    <script src="/static/js/app.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+
+<body class="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased">
+
+<div class="fixed inset-0 -z-10 bg-app-gradient"></div>
+<div class="fixed inset-0 -z-10 opacity-30 bg-grid-pattern"></div>
+
+<!-- ==================== Header ==================== -->
+<header class="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6">
+        <div class="flex items-center justify-between h-16">
+
+            <!-- الشعار -->
+            <div class="flex items-center gap-3">
+                <svg width="34" height="34" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
+                    <rect width="64" height="64" rx="16" fill="url(#pcGrad2)"/>
+                    <path d="M20 42 L32 18 L36 18 L26 42 Z" fill="white" opacity="0.95"/>
+                    <circle cx="45" cy="22" r="4" fill="white"/>
+                    <circle cx="45" cy="22" r="8" stroke="white" stroke-opacity="0.45" stroke-width="1.5"/>
+                    <defs>
+                        <linearGradient id="pcGrad2" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+                            <stop stop-color="#3366FF"/>
+                            <stop offset="1" stop-color="#7C3AED"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <div class="leading-tight">
+                    <span class="block font-extrabold text-white">PromptCraft</span>
+                    <span class="block text-[11px] text-slate-500">صانع البرومبتات</span>
+                </div>
+            </div>
+
+            <!-- حالة المستخدم -->
+            <div class="flex items-center gap-2 sm:gap-3" x-data="{ open: false }">
+                <span class="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-brand-500/10 border border-brand-500/25 px-3 py-1.5 text-xs text-brand-200">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    متصل
+                </span>
+
+                <div class="relative">
+                <button @click="open = !open"
+                            class="flex items-center gap-2 rounded-full bg-slate-900 border border-slate-700 hover:border-slate-600 py-1.5 pl-2 pr-3 transition">
+                        <span class="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-bl from-brand-500 to-violet-600 text-xs font-bold text-white"
+                              x-text="(auth_user.username || '?').slice(0,2).toUpperCase()"></span>
+                        <span class="text-sm font-semibold text-slate-200" x-text="auth_user.username"></span>
+                        <svg class="w-4 h-4 text-slate-500 transition" :class="open && 'rotate-180'"
+                             fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/>
+                        </svg>
+                    </button>
+
+                    <!-- قائمة -->
+                    <div x-show="open" @click.outside="open = false" x-transition.origin.top.left
+                         class="absolute left-0 mt-2 w-48 rounded-xl bg-slate-900 border border-slate-700 shadow-xl overflow-hidden z-40">
+                        <div class="px-4 py-3 border-b border-slate-800">
+                            <p class="text-xs text-slate-500">مسجّل باسم</p>
+                            <p class="text-sm font-semibold text-slate-200 truncate" x-text="auth_user.username"></p>
+                        </div>
+                        <a href="/library" class="block px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800 transition">
+                            مكتبتي (قريبًا)
+                        </a>
+                        <button @click="pcLogout()"
+                                class="w-full text-right px-4 py-2.5 text-sm text-rose-300 hover:bg-rose-500/10 transition flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/>
+                            </svg>
+                            تسجيل الخروج
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<!-- ==================== المحتوى ==================== -->
+<main class="mx-auto max-w-7xl px-4 sm:px-6 py-8" x-data="composer()" x-cloak>
+
+    <!-- عنوان -->
+    <div class="mb-7">
+        <h1 class="text-2xl sm:text-3xl font-extrabold text-white">أنشئ برومبت احترافي</h1>
+        <p class="mt-1.5 text-sm text-slate-400">
+            اكتب وصفك أو ارفع تسجيلًا صوتيًا، واختر الأداة المستهدفة.
+        </p>
+    </div>
+
+    <!-- تنبيه حالة التفريغ -->
+    <div x-show="!transcribeReady" x-transition
+         class="mb-6 flex items-start gap-3 rounded-xl bg-amber-500/10 border border-amber-500/30 p-4">
+        <svg class="w-5 h-5 text-amber-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
+        </svg>
+        <p class="text-sm text-amber-200 leading-relaxed">
+            <span class="font-semibold">التفريغ الصوتي الحقيقي معطّل.</span>
+            أضف <code class="text-amber-100">OPENAI_API_KEY</code> في ملف
+            <code class="text-amber-100">.env</code> ثم أعد تشغيل الخادم.
+            يمكنك رفع ملف للتجربة الآن.
+        </p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+        <!-- ==================== العمود الأيمن: المصدر ==================== -->
+        <section class="lg:col-span-3 space-y-6">
+
+            <!-- (1) الوصف النصي -->
+            <div class="glass-card rounded-2xl p-5 sm:p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="flex items-center gap-2 font-bold text-white">
+                        <span class="grid h-7 w-7 place-items-center rounded-lg bg-brand-500/15 text-brand-300 text-xs font-bold">1</span>
+                        وصفك
+                    </h2>
+                    <span class="text-xs text-slate-500">
+                        <span x-text="inputText.length"></span> حرف
+                    </span>
+                </div>
+
+                <textarea x-model="inputText"
+                          @input="clearError('text')"
+                          rows="6"
+                          placeholder="مثال: أبغى مقال عن فوائد الذكاء الاصطناعي في التعليم، باللغة العربية، بأسلوب بسيط وموجّه لطلاب المرحلة الثانوية…"
+                          class="w-full rounded-xl bg-slate-900/70 border border-slate-700 px-4 py-3.5 text-slate-100 placeholder-slate-600 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/30 resize-y leading-relaxed"></textarea>
+
+                <p x-show="inputText.length > 0"
+                   x-transition.opacity
+                   class="mt-2 text-xs text-slate-500">
+                    النص اجتاز جاهز للتوليد ✅ — الوصف الواضح يعطي برومبتًا أدق.
+                </p>
+            </div>
+
+            <!-- (2) الصوت -->
+            <div class="glass-card rounded-2xl p-5 sm:p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="flex items-center gap-2 font-bold text-white">
+                        <span class="grid h-7 w-7 place-items-center rounded-lg bg-brand-500/15 text-brand-300 text-xs font-bold">2</span>
+                        أو صفِ ما تريده صوتًا
+                    </h2>
+                    <span class="text-xs text-slate-500">حتى {{ maxUploadMb }} ميجابايت</span>
+                </div>
+
+                <!-- منطقة السحب والإفلات -->
+                <div @dragover.prevent="dragActive = true"
+                     @dragleave.prevent="dragActive = false"
+                     @drop.prevent="onDrop($event)"
+                     :class="dragActive ? 'dropzone-active' : (uploading ? 'dropzone-busy' : '')"
+                     class="dropzone rounded-2xl border-2 border-dashed px-5 py-7 text-center transition">
+
+                    <!-- حالة: يسحب ملفًا -->
+                    <template x-if="dragActive && !uploading">
+                        <div class="py-2">
+                            <svg class="w-9 h-9 mx-auto text-brand-300 mb-2" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"/>
+                            </svg>
+                            <p class="font-semibold text-brand-200">أفلت الملف هنا</p>
+                        </div>
+                    </template>
+
+                    <!-- حالة: جارٍ الرفع/التفريغ -->
+                    <template x-if="uploading">
+                        <div class="py-2">
+                            <svg class="w-9 h-9 mx-auto text-brand-300 mb-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/>
+                                <path class="opacity-90" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                                      d="M12 2a10 10 0 0110 10"/>
+                            </svg>
+                            <p class="font-semibold text-slate-200" x-text="uploadStatus"></p>
+                            <p class="text-xs text-slate-500 mt-1" x-text="audioFile ? audioFile.name : ''"></p>
+                        </div>
+                    </template>
+
+                    <!-- الحالة الافتراضية -->
+                    <template x-if="!dragActive && !uploading">
+                        <div class="py-1">
+                            <svg class="w-9 h-9 mx-auto text-slate-500 mb-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"/>
+                            </svg>
+                            <p class="text-sm font-semibold text-slate-300">اسحب ملفًا صوتيًا وأفلته هنا</p>
+                            <p class="mt-1 text-xs text-slate-500">
+                                أو
+                                <label for="audioFile" class="text-brand-300 cursor-pointer underline underline-offset-2 hover:text-brand-200">
+                                    تصفّح من جهازك
+                                </label>
+                            </p>
+                            <p class="mt-2 text-[11px] text-slate-600">
+                                <span x-text="allowedExtensions.join(' · ')"></span>
+                            </p>
+                        </div>
+                    </template>
+
+                    <input type="file" id="audioFile" class="hidden"
+                           accept=".mp3,.mp4,.m4a,.wav,.webm,.ogg,.mpeg,.mpga,.flac,audio/*"
+                           @change="onPick($event)">
+                </div>
+
+                <!-- أخطاء الصوت -->
+                <p x-show="audioError" x-transition
+                   class="mt-3 flex items-start gap-2 rounded-lg bg-rose-500/10 border border-rose-500/30 p-3 text-sm text-rose-200">
+                    <svg class="w-4 h-4 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 012 0v4a1 1 0 11-2 0V9zm1-4a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd"/>
+                    </svg>
+                    <span x-text="audioError"></span>
+                </p>
+
+                <!-- التسجيل المباشر -->
+                <div class="mt-4 flex flex-wrap items-center gap-3">
+                    <button type="button"
+                            @click="toggleRecording()"
+                            :class="isRecording ? 'recording-active' : 'recording-idle'"
+                            class="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-rose-400/40">
+                        <span class="rec-dot"></span>
+                        <span x-text="isRecording ? 'إيقاف التسجيل' : 'تسجيل صوتي مباشر'"></span>
+                    </button>
+
+                    <div x-show="isRecording" x-transition class="inline-flex items-center gap-2 text-sm text-rose-300 font-mono">
+                        <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+                        <span x-text="formatTime(recSeconds)"></span>
+                    </div>
+
+                    <span x-show="!isRecording && recSeconds > 0" class="text-xs text-slate-500">
+                        آخر تسجيل: <span class="font-mono" x-text="formatTime(recSeconds)"></span>
+                    </span>
+
+                    <p x-show="!mediaRecorderSupported" class="text-xs text-amber-300">
+                        ⚠️ متصفحك لا يدعم التسجيل المباشر — استخدم رفع الملف.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== العمود الأيسر: الأداة + النتيجة ==================== -->
+        <aside class="lg:col-span-2 space-y-6">
+
+            <!-- (3) الأداة المستهدفة -->
+            <div class="glass-card rounded-2xl p-5 sm:p-6">
+                <h2 class="flex items-center gap-2 font-bold text-white mb-4">
+                    <span class="grid h-7 w-7 place-items-center rounded-lg bg-brand-500/15 text-brand-300 text-xs font-bold">3</span>
+                    الأداة المستهدفة
+                </h2>
+
+                <select x-model="targetTool"
+                        class="w-full rounded-xl bg-slate-900/70 border border-slate-700 px-4 py-3 text-slate-100 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/30">
+                    <template x-for="tool in tools" :key="tool.id">
+                        <option :value="tool.id" x-text="tool.name + ' — ' + tool.hint"></option>
+                    </template>
+                </select>
+
+                <p class="mt-2 text-xs text-slate-500" x-text="currentToolHint"></p>
+            </div>
+
+            <!-- (4) زر التوليد -->
+            <div class="glass-card rounded-2xl p-5 sm:p-6">
+                <h2 class="flex items-center gap-2 font-bold text-white mb-4">
+                    <span class="grid h-7 w-7 place-items-center rounded-lg bg-brand-500/15 text-brand-300 text-xs font-bold">4</span>
+                    التوليد
+                </h2>
+
+                <button type="button"
+                        disabled
+                        title="محرك البرومبتات يصل في المرحلة 3"
+                        class="w-full rounded-xl bg-slate-800/70 border border-slate-700 px-5 py-3.5 font-bold text-slate-500 cursor-not-allowed">
+                    توليد البرومبت — قريبًا (المرحلة 3)
+                </button>
+
+                <p x-show="generateNotice" x-transition class="mt-2 text-xs text-amber-300/90">
+                    <span x-text="generateNotice"></span>
+                </p>
+            </div>
+
+            <!-- (5) النتيجة -->
+            <div class="glass-card rounded-2xl p-5 sm:p-6 min-h-[240px]">
+                <h2 class="flex items-center gap-2 font-bold text-white mb-4">
+                    <span class="grid h-7 w-7 place-items-center rounded-lg bg-brand-500/15 text-brand-300 text-xs font-bold">5</span>
+                    البرومبت الجاهز
+                </h2>
+
+                <!-- حالة فارغة -->
+                <div class="flex flex-col items-center justify-center text-center py-10 border border-dashed border-slate-800 rounded-xl">
+                    <svg class="w-10 h-10 text-slate-700 mb-3" fill="none" stroke="currentColor" stroke-width="1.4" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zM19.5 14.25v4.75a2 2 0 01-2 2H5a2 2 0 01-2-2V6.5a2 2 0 012-2h4.75"/>
+                    </svg>
+                    <p class="text-sm text-slate-500">سيظهر البرومبت هنا</p>
+                    <p class="mt-1 text-xs text-slate-600">مهيكل · جاهز للنسخ</p>
+                </div>
+            </div>
+        </aside>
+    </div>
+</main>
+
+<!-- ==================== Toast ==================== -->
+<div x-data="toastStack()" x-cloak class="fixed bottom-5 left-5 z-50 space-y-2 w-[min(92vw,26rem)]">
+    <template x-for="t in toasts" :key="t.id">
+        <div :class="t.kind === 'error' ? 'toast-error' : 'toast-ok'"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 translate-y-2"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             class="flex items-start gap-3 rounded-xl px-4 py-3 shadow-xl backdrop-blur border text-sm">
+            <svg class="w-5 h-5 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <template x-if="t.kind === 'ok'">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/>
+                </template>
+                <template x-if="t.kind !== 'ok'">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 012 0v4a1 1 0 11-2 0V9zm1-4a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd"/>
+                </template>
+            </svg>
+            <p class="flex-1 leading-relaxed" x-text="t.text"></p>
+            <button @click="dismiss(t.id)" class="text-slate-400 hover:text-white transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+    </template>
+</div>
+
+</body>
+</html>

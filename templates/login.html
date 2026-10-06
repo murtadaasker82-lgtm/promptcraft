@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تسجيل الدخول — {{ app_name }}</title>
+
+    <!-- TailwindCSS عبر CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Cairo', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            50: '#eef4ff', 100: '#d9e6ff', 200: '#bcd3ff',
+                            300: '#8eb6ff', 400: '#598eff', 500: '#3366ff',
+                            600: '#1f43f5', 700: '#1a31e1', 800: '#1c2cb6',
+                            900: '#1d2d8f',
+                        },
+                    },
+                },
+            },
+        };
+    </script>
+
+    <!-- خط Cairo -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/app.js"></script>
+    <!-- Alpine.js عبر CDN -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+
+<body class="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased">
+
+    <!-- خلفية متدرجة -->
+    <div class="fixed inset-0 -z-10 bg-app-gradient"></div>
+    <div class="fixed inset-0 -z-10 opacity-40 bg-grid-pattern"></div>
+
+    <main class="min-h-screen flex items-center justify-center px-4 py-10">
+
+        <div class="w-full max-w-md" x-data="loginForm()" x-cloak>
+
+            <!-- البطاقة -->
+            <div class="glass-card rounded-3xl p-8 sm:p-10 shadow-2xl">
+
+                <!-- الشعار -->
+                <div class="flex flex-col items-center text-center mb-8">
+                    <div class="logo-mark mb-5" aria-hidden="true">
+                        <svg width="56" height="56" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect width="64" height="64" rx="16" fill="url(#pcGrad)"/>
+                            <path d="M20 42 L32 18 L36 18 L26 42 Z" fill="white" opacity="0.95"/>
+                            <path d="M26 42 L30 42 L34 32 L30 32 Z" fill="white" opacity="0.7"/>
+                            <circle cx="45" cy="22" r="4" fill="white"/>
+                            <circle cx="45" cy="22" r="8" stroke="white" stroke-opacity="0.45" stroke-width="1.5"/>
+                            <defs>
+                                <linearGradient id="pcGrad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+                                    <stop stop-color="#3366FF"/>
+                                    <stop offset="1" stop-color="#7C3AED"/>
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+
+                    <h1 class="text-3xl font-extrabold tracking-tight text-white">PromptCraft</h1>
+                    <p class="mt-2 text-sm text-slate-400 leading-relaxed">
+                        حوّل وصفك النصي أو الصوتي إلى برومبت احترافي جاهز للنسخ
+                    </p>
+                </div>
+
+                <!-- رسالة الخطأ -->
+                <div x-show="error"
+                     x-transition.opacity.duration.200ms
+                     class="mb-5 flex items-start gap-3 rounded-xl bg-rose-500/10 border border-rose-500/30 p-4">
+                    <svg class="w-5 h-5 text-rose-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 012 0v4a1 1 0 11-2 0V9zm1-4a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd"/>
+                    </svg>
+                    <p class="text-sm text-rose-200 leading-relaxed" x-text="error"></p>
+                </div>
+
+                <!-- النموذج -->
+                <form @submit.prevent="submit" class="space-y-5" novalidate>
+
+                    <div>
+                        <label for="username" class="block text-sm font-semibold text-slate-300 mb-2">
+                            اسم المستخدم
+                        </label>
+                        <div class="relative">
+                            <input id="username"
+                                   name="username"
+                                   type="text"
+                                   x-model="username"
+                                   @input="clearError"
+                                   @blur="prefillDisplayName"
+                                   :disabled="loading"
+                                   autocomplete="username"
+                                   autofocus
+                                   placeholder="مثال: murad"
+                                   class="w-full rounded-xl bg-slate-900/70 border border-slate-700 px-4 py-3.5 pl-11 text-slate-100 placeholder-slate-500 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/30 disabled:opacity-60"
+                                   maxlength="32"
+                                   required>
+                            <svg class="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
+                                 fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.1a7.5 7.5 0 0115 0v.15a24 24 0 01-15 0v-.15z"/>
+                            </svg>
+                        </div>
+
+                        <!-- تلميح القاعدة -->
+                        <p class="mt-2 text-xs text-slate-500 leading-relaxed">
+                            3–32 حرفًا · حروف إنجليزية وأرقام و <code class="text-slate-400">_ . -</code> فقط
+                        </p>
+                        <p x-show="displayName && displayName !== username"
+                           x-transition.opacity
+                           class="mt-1 text-xs text-brand-300">
+                            سيُنشأ حساب باسم: <span class="font-semibold" x-text="displayName"></span>
+                        </p>
+                    </div>
+
+                    <!-- زر الدخول -->
+                    <button type="submit"
+                            :disabled="loading || !username.trim()"
+                            class="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-brand-600 to-violet-600 px-5 py-3.5 font-bold text-white shadow-lg shadow-brand-900/40 transition hover:from-brand-500 hover:to-violet-500 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none">
+                        <span x-show="!loading">دخول</span>
+                        <span x-show="loading" class="inline-flex items-center gap-2">
+                            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-90" fill="currentColor"
+                                      d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+                            </svg>
+                            جارٍ الدخول…
+                        </span>
+                    </button>
+                </form>
+
+                <!-- تنبيه أمني -->
+                <div class="mt-7 flex items-start gap-3 rounded-xl bg-slate-900/50 border border-slate-800 p-4">
+                    <svg class="w-5 h-5 text-amber-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
+                    </svg>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        <span class="text-amber-300 font-semibold">لا توجد كلمة مرور.</span>
+                        اختر اسمًا لا يعرفه أحد — من يعرف اسمك يستطيع الدخول إلى مكتبتك.
+                    </p>
+                </div>
+            </div>
+
+            <!-- التذييل -->
+            <p class="mt-6 text-center text-xs text-slate-600">
+                {{ app_name }} v{{ version }} · بياناتك محفوظة محليًا على جهازك
+            </p>
+        </div>
+    </main>
+
+</body>
+</html>
