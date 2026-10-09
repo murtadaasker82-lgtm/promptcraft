@@ -53,11 +53,13 @@ class Settings(BaseSettings):
     OPENROUTER_MODEL: str = "nvidia/nemotron-3-super-120b-a12b:free"
     # نماذج احتياطية تُجرَّب بالترتيب عند فشل الأساسي بأحد رموز
     # RETRYABLE_MODEL_STATUSES (429 مزدحم / 503 مؤقت / 404 غير موجود).
+    # تحذير: `qwen/qwen-2.5-7b-instruct` و`gemini-2.0-flash-exp` رجعا 404
+    # عند التحقق (أُزيلا من الواجهة) — باقيان كخيار لو عادا، وقائمة النماذج
+    # المجانية تتغيّر باستمرار: راجع https://openrouter.ai/models
     # ملاحظة: صيغتها في .env يجب أن تكون JSON مصفوفة.
     OPENROUTER_MODELS_FALLBACK: list[str] = [
         "qwen/qwen-2.5-7b-instruct:free",
         "google/gemini-2.0-flash-exp:free",
-        "meta-llama/llama-3.3-70b-instruct:free",
         "apodex/apodex-1.1-mini:free",
     ]
     # نقطة النهاية المتوافقة مع OpenAI SDK

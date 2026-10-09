@@ -231,10 +231,10 @@ async def _call_model(
                 )
             elapsed = time.perf_counter() - started
             logger.info(
-                "اكتمل الاستدعاء في %.2fث (model=%s، بث=%s، محاولات=%s، "
-                "%s حرف، حد=%s رمز)",
-                elapsed,
+                "[%s] نجح %s في %.2fث (بث=%s، محاولات=%s، %s حرف، حد=%s رمز)",
+                time.strftime("%H:%M:%S"),
                 model,
+                elapsed,
                 "نعم" if stream else "لا",
                 attempt,
                 len(text),
@@ -343,6 +343,7 @@ async def chat_completion(
 
     candidates = _model_candidates(model)
     last_error: LLMError | None = None
+    chain_started = time.perf_counter()
 
     for index, candidate in enumerate(candidates):
         try:
@@ -355,14 +356,28 @@ async def chat_completion(
             # نحكم على الرمز الأصلي من الخدمة لا على المعروض (503 تُعرض 502)
             http_status = exc.http_status if exc.http_status is not None else exc.status_code
             if http_status not in RETRYABLE_MODEL_STATUSES or not has_next:
+                if not has_next:
+                    logger.error(
+                        "[%s] نفدت سلسلة النماذج — آخر نموذج فاشل: %s (%s) "
+                        "بعد %.2fث من %s محاولة",
+                        time.strftime("%H:%M:%S"),
+                        candidate,
+                        http_status,
+                        time.perf_counter() - chain_started,
+                        len(candidates),
+                    )
                 raise
             logger.warning(
-                "النموذج %s فشل (%s) — جرّب %s (%s من %s)",
+                "[%s] فشل النموذج %s (رمز %s) بعد %.2fث — التالي: %s "
+                "(النموذج %s من %s، إجمالي %.2fث)",
+                time.strftime("%H:%M:%S"),
                 candidate,
                 http_status,
+                time.perf_counter() - chain_started,
                 candidates[index + 1],
                 index + 2,
                 len(candidates),
+                time.perf_counter() - chain_started,
             )
 
     raise last_error or LLMError("فشل توليد البرومبت", status_code=502)

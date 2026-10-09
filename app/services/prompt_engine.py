@@ -371,16 +371,78 @@ def _mock_prompt(raw_input: str, tool: str, framework: str, language: str) -> st
     return "\n".join(parts)
 
 
+# عبارات يفتتح النموذج بها كلامه رغم التعليمات — تُحذف من أول الرد
+_PREAMBLE_PREFIXES = (
+    "بالطبع",
+    "إليك",
+    "فيما يلي",
+    "هذا",
+    "here is",
+    "here's",
+    "certainly",
+    "sure",
+    "of course",
+)
+
+_FENCE_CLOSED = re.compile(
+    r"^```(?:markdown|md)?[ \t]*\n(?P<inner>.*?)\n?[ \t]*```$",
+    re.DOTALL | re.IGNORECASE,
+)
+_FENCE_OPEN = re.compile(r"^```(?:markdown|md)?[ \t]*\n(?P<inner>.*)", re.DOTALL | re.IGNORECASE)
+
+
+def _strip_code_fence(text: str) -> str:
+    """
+    يزيل أسوار ```markdown من أول الرد وآخره.
+
+    يغطّي حالتين: السور مغلق (شائع) ومفتوح فقط (يحدث حين يقطع `max_tokens`
+    الردّ قبل السطر الأخير).
+    """
+    body = text.strip()
+
+    closed = _FENCE_CLOSED.match(body)
+    if closed:
+        return closed.group("inner").strip()
+
+    opened = _FENCE_OPEN.match(body)
+    if opened:
+        return opened.group("inner").strip()
+
+    return body
+
+
+def _is_preamble_line(line: str) -> bool:
+    """هل يفتتح هذا السطر بإحدى عبارات التمهيد المعروفة؟"""
+    # سطر يبدأ بـ `#` عنوان داخل البرومبت — محتوى لا تمهيد، حتى لو بدأ بكلمة
+    # مثل "هذا" (مثل "## هذا هو الهدف"). لذلك لا ننزع `#` قبل الفحص.
+    if line.lstrip().startswith("#"):
+        return False
+    # أما علامة الاقتباس `>` فالتمهيد تحتها شائع، فنزعها قبل الفحص
+    cleaned = line.lstrip("> \t").strip().lower()
+    return cleaned.startswith(_PREAMBLE_PREFIXES)
+
+
 def _strip_preamble(text: str) -> str:
-    """يحذف العبارات التمهيدية الشائعة التي قد يضيفها النموذج رغم التعليمات."""
-    patterns = [
-        r"^\s*(?:إليك|فيما يلي|هذا|هذا هو)[^\n:]{0,40}:\s*\n+",
-        r"^\s*(?:here is|here's)[^\n:]{0,60}:\s*\n+",
-    ]
-    result = text.strip()
-    for pattern in patterns:
-        result = re.sub(pattern, "", result, flags=re.IGNORECASE)
-    return result.strip() or text.strip()
+    """
+    ينظّف الردّ من زوائد النموذج: أسوار الكود وعبارات التمهيد.
+
+    يحذف أسطر التمهيد من **البداية فقط** — التمهيد يسبق المحتوى ولا يقع في
+    وسطه، فحذفه من كل موضع كان سيبتلع جزءًا من البرومبت نفسه. وإن فرغ النص
+    كله نُعيد الأصل حذرًا بدل ردّ فارغ.
+    """
+    result = _strip_code_fence(text)
+    lines = result.splitlines()
+
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if not line.strip() or _is_preamble_line(line):
+            index += 1
+            continue
+        break
+
+    cleaned = "\n".join(lines[index:]).strip()
+    return cleaned or text.strip()
 
 
 async def generate_prompt(
