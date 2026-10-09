@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     PROMPT_CACHE_SIZE: int = 50
     PROMPT_CACHE_TTL: int = 3600
 
+    # ---- النسخ الاحتياطي ----
+    # نسخة مؤرّخة من ملف قاعدة البيانات عند كل إقلاع
+    BACKUP_ENABLED: bool = True
+    BACKUP_KEEP_DAYS: int = 7
+
     # ---- الرفع الصوتي ----
     UPLOAD_DIR: Path = BASE_DIR / "data" / "uploads"
     MAX_UPLOAD_MB: int = 25

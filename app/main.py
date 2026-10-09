@@ -19,6 +19,7 @@ from app.models import User
 from app.routers.audio_router import router as audio_router
 from app.routers.auth_router import router as auth_router
 from app.routers.prompt_router import library_router, router as prompt_router
+from app.services.backup import create_backup
 
 # ---------------- التسجيل (logging) ----------------
 
@@ -37,6 +38,13 @@ async def lifespan(app: FastAPI):
     """قبل الإقلاع: إنشاء المجلدات والجداول وتنظيف الملفات القديمة. عند الإغلاق: تنظيف."""
     settings.ensure_directories()
     init_db()
+
+    # نسخة احتياطية بعد إنشاء الجداول وقبل استقبال أي طلب، فالتراجع عنها
+    # ممكن إن أفسدت إقلاعٌ لاحق الشكل. الفشل هنا لا يوقف الخادم.
+    try:
+        create_backup()
+    except Exception:  # noqa: BLE001 — النسخ leiست مسارًا حرجًا
+        logger.exception("فشل النسخ الاحتياطي عند الإقلاع")
 
     removed_uploads = settings.cleanup_uploads(keep_hours=6)
     if removed_uploads:
@@ -71,6 +79,8 @@ async def lifespan(app: FastAPI):
         logger.warning("OpenRouter: مفتاح غير مضبوط — توليد البرومبتات معطّل حتى تضيف OPENROUTER_API_KEY في .env")
     logger.info("حد الرفع: %s ميجابايت — الصيغ: %s",
                 settings.MAX_UPLOAD_MB, ", ".join(settings.ALLOWED_AUDIO_EXTENSIONS))
+    if settings.BACKUP_ENABLED:
+        logger.info("النسخ الاحتياطي مفعّل — الاحتفاظ %s يومًا", settings.BACKUP_KEEP_DAYS)
     yield
     logger.info("إيقاف %s", settings.APP_NAME)
 
@@ -161,6 +171,7 @@ def health() -> dict:
         "openrouter_configured": settings.openrouter_ready,
         "prompt_mock": settings.PROMPT_MOCK,
         "openrouter_model": settings.OPENROUTER_MODEL,
+        "backup_enabled": settings.BACKUP_ENABLED,
         "uploads_dir": str(settings.UPLOAD_DIR),
         "max_upload_mb": settings.MAX_UPLOAD_MB,
     }
