@@ -4,7 +4,7 @@ services:
     env: python
     plan: starter
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips=*
+    startCommand: gunicorn app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --access-logfile - --error-logfile -
     healthCheckPath: /api/health
     envVars:
       - key: PYTHON_VERSION
@@ -13,10 +13,15 @@ services:
         generateValue: true
       - key: COOKIE_SECURE
         value: "true"
-      # اتركه للوحة تحكم Render. صيغة JSON list.
-      # مثال: ["https://promptcraft.onrender.com"]
+      # صيغة JSON list إلزامية (pydantic-settings). غيّرها لنطاقك الفعلي لاحقًا.
       - key: CORS_ORIGINS
-        syncPlaceholder: true
+        value: '["*"]'
+      - key: OPENROUTER_MODEL
+        value: apodex/apodex-1.1-mini:free
+      - key: PROMPT_MOCK
+        value: "false"
+      - key: WHISPER_MOCK
+        value: "true"
     disk:
       name: promptcraft-data
       mountPath: /opt/render/project/src/data
