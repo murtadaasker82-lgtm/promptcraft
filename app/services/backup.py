@@ -160,11 +160,11 @@ def restore_backup(filename: str) -> Path:
     :raises BackupError: اسم غير صالح، أو نسخة غير موجودة، أو فشل الكتابة
     """
     if not settings.is_sqlite:
-        raise RuntimeError(f"Backup not supported for {settings.database_backend}")
+        raise BackupError(f"Backup not supported for {settings.database_backend}")
 
     db_path = database_path()
     if db_path is None:
-        raise RuntimeError(f"Backup not supported for {settings.database_backend}")
+        raise BackupError(f"Backup not supported for {settings.database_backend}")
 
     # حارس اجتياز المسارات: نقبل اسمًا عاديًا فقط، بلا مسارات ولا `..`
     if Path(filename).name != filename or not _is_backup_file(Path(filename)):

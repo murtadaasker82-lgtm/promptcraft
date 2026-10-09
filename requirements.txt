@@ -14,7 +14,11 @@ python-multipart==0.0.20
 # Database
 # =====
 SQLAlchemy==2.0.36
-# Turso / libSQL — يُستخدم في الإنتاج، ولا يُستورد محليًا إلا عند ضبط TURSO_DATABASE_URL
+# Turso / libSQL — dialect "libsql" لـ SQLAlchemy، يُستورد في الإنتاج فقط
+# (لا يُستورد محليًا ما دام DATABASE_URL يشير إلى sqlite).
+# إن فشل بناء هذه الحزمة على Render، بدّلها إلى السائق البديل:
+#   libsql-experimental==0.0.57
+# لا حاجة لتعديل الاستيراد: database.py يستورد sqlalchemy_libsql عند is_turso فقط.
 sqlalchemy-libsql==0.1.0
 libsql-client==0.3.1
 
