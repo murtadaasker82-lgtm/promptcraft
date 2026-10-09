@@ -7,14 +7,34 @@
 
 const CFG = window.__PC_CONFIG__ || {};
 
-/* قائمة الأدوات المستهدفة */
-const TARGET_TOOLS = [
-    { id: 'chatgpt', name: 'ChatGPT', hint: 'حوار عام، تحليل، كتابة' },
-    { id: 'claude', name: 'Claude', hint: 'نصوص طويلة، كود، مستندات' },
-    { id: 'gemini', name: 'Gemini', hint: 'بحث، Google-flavored' },
-    { id: 'midjourney', name: 'Midjourney', hint: 'صور — visual prompt' },
-    { id: 'cursor', name: 'Cursor', hint: 'تعديل كود داخل IDE' },
-    { id: 'general', name: 'عام', hint: 'محايد لكل النماذج' },
+/* نسخة محلية من محرك البرومبتات — تُستخدم كاحتياطي فقط إذا فشل تحميل
+   /api/prompt/frameworks، حتى تبقى القوائم قابلة للاستخدام دائمًا.
+   المصدر الحقيقي هو المحرك في app/services/prompt_engine.py. */
+const TOOLS_FALLBACK = [
+    { id: 'chatgpt', name_ar: 'ChatGPT', description_ar: 'نماذج OpenAI المحادثة — رد نصي أو تحليلي منظّم.' },
+    { id: 'claude', name_ar: 'Claude', description_ar: 'نماذج Anthropic — ممتازة للنصوص الطويلة والتحليل متعدد الخطوات.' },
+    { id: 'gemini', name_ar: 'Gemini', description_ar: 'نماذج Google — قوية في الجداول والمقارنات وربط خدمات Google.' },
+    { id: 'midjourney', name_ar: 'Midjourney', description_ar: 'توليد الصور — يحتاج وصفًا بصريًا دقيقًا ومعاملات إعدادات في النهاية.' },
+    { id: 'cursor', name_ar: 'Cursor', description_ar: 'محرّر الكود بالذكاء الاصطناعي — يحتاج سياقًا وتعليمات تحرير.' },
+    { id: 'general', name_ar: 'عام', description_ar: 'برومبت محايد يصلح لأي نموذج محادثة.' },
+];
+
+const FRAMEWORKS_FALLBACK = [
+    {
+        id: 'co-star',
+        name_ar: 'CO-STAR',
+        description_ar: 'سياق، هدف، أسلوب، نبرة، جمهور، صيغة — الأشمل وأنسب لمهام المحتوى والتسويق.',
+    },
+    {
+        id: 'crispe',
+        name_ar: 'CRISPE',
+        description_ar: 'سعة، دور، رؤية، مطلوب، شخصية، تجربة — أدق في ضبط الدور والحدود ومخرجات ثابتة البنية.',
+    },
+    {
+        id: '5c',
+        name_ar: '5C',
+        description_ar: 'شخصية، دافع، قيد، استثناء، معيار ثقة — الأقصر والأنسب للردود المباشرة.',
+    },
 ];
 
 /* كائن عام متاح لكل قوالب Alpine في الصفحة */
@@ -23,7 +43,11 @@ window.PC = {
     maxUploadMb: CFG.max_upload_mb || 25,
     allowedExtensions: CFG.allowed_extensions || [],
     transcribeReady: CFG.transcribe_ready !== false,
-    tools: TARGET_TOOLS,
+    promptReady: CFG.prompt_ready !== false,
+    promptMock: Boolean(CFG.prompt_mock),
+    model: CFG.openrouter_model || '—',
+    tools: TOOLS_FALLBACK,
+    frameworks: FRAMEWORKS_FALLBACK,
 };
 
 /* ---------------- أدوات مشتركة ---------------- */
@@ -49,12 +73,13 @@ async function readError(response) {
         400: 'طلب غير صالح',
         401: 'انتهت الجلسة — سجّل الدخول من جديد',
         403: 'لا تملك صلاحية لهذا الإجراء',
+        404: 'المسار غير موجود',
         413: 'الملف كبير جدًا (الحد 25 ميجابايت)',
         415: 'نوع الملف غير مدعوم',
-        429: 'محاولات كثيرة — انتظر قليلًا ثم أعد المحاولة',
+        429: 'النموذج مزدحم — انتظر قليلًا ثم أعد المحاولة',
         500: 'خطأ في الخادم',
-        502: 'فشل الاتصال بخدمة OpenAI',
-        503: 'مفتاح OpenAI غير مضبوط',
+        502: 'فشل الاتصال بخدمة OpenRouter',
+        503: 'مفتاح OpenRouter غير مضبوط',
     };
 
     return byStatus[response.status] || `خطأ في الخادم (${response.status})`;
@@ -85,6 +110,26 @@ async function apiFetch(url, options = {}) {
     return response.status === 204 ? null : response.json();
 }
 
+/** نسخ نص إلى الحافظة مع بديل للمتصفحات التي لا تدعم الحافظة الحديثة */
+async function copyToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+
+    const helper = document.createElement('textarea');
+    helper.value = text;
+    helper.setAttribute('readonly', '');
+    helper.style.position = 'fixed';
+    helper.style.top = '-1000px';
+    helper.style.opacity = '0';
+    document.body.appendChild(helper);
+    helper.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(helper);
+    if (!ok) throw new Error('execCommand copy failed');
+}
+
 /** تنسيق الثواني → mm:ss */
 function formatTime(totalSeconds) {
     const s = Math.max(0, Math.floor(totalSeconds || 0));
@@ -110,8 +155,16 @@ function loginForm() {
         loading: false,
         error: '',
 
+        // أي حرف خارج (حروف عربية/إنجليزية/مسافة) يمنع الإرسال ويظهر التنبيه.
+        // بلا راية `g` حتى لا يتأثر lastIndex بين الاستدعاءات.
+        INVALID_CHARS: /[^A-Za-z؀-ي ]/,
+
         get displayName() {
             return this.username.trim();
+        },
+
+        get hasInvalidChars() {
+            return this.INVALID_CHARS.test(this.username);
         },
 
         prefillDisplayName() {
@@ -130,8 +183,12 @@ function loginForm() {
                 this.error = 'اكتب اسم المستخدم أولًا';
                 return;
             }
-            if (name.length < 3) {
-                this.error = 'اسم المستخدم قصير جدًا — 3 أحرف على الأقل';
+            if (this.hasInvalidChars) {
+                this.error = 'الاسم يجب أن يحتوي على حروف فقط (عربية أو إنجليزية)';
+                return;
+            }
+            if (name.length < 2) {
+                this.error = 'اسم المستخدم قصير جدًا — حرفان على الأقل';
                 return;
             }
 
@@ -162,12 +219,28 @@ function composer() {
         maxUploadMb: window.PC.maxUploadMb,
         allowedExtensions: window.PC.allowedExtensions,
         transcribeReady: window.PC.transcribeReady,
-        tools: window.PC.tools,
+        promptReady: window.PC.promptReady,
+        promptMock: window.PC.promptMock,
+        model: window.PC.model,
 
-        // ---- الحالة ----
+        // ---- القوائم (تُحدَّث من /api/prompt/frameworks عند الإقلاع) ----
+        tools: window.PC.tools,
+        frameworks: window.PC.frameworks,
+
+        // ---- حالة النموذج ----
         inputText: '',
-        targetTool: 'general',
-        generateNotice: '',
+        selectedTool: 'general',
+        selectedFramework: 'co-star',
+        selectedLanguage: 'ar',
+        autoFramework: false,
+        suggestNotice: '',
+
+        // ---- حالة التشغيل ----
+        isLoading: false,
+        isEnhancing: false,
+        result: null,
+        error: '',
+        copied: false,
 
         // ---- الصوت ----
         audioFile: null,
@@ -175,7 +248,7 @@ function composer() {
         uploadStatus: '',
         uploading: false,
         dragActive: false,
-        isMock: false,
+        transcribeMock: false,
 
         // ---- التسجيل ----
         isRecording: false,
@@ -188,16 +261,221 @@ function composer() {
         _stream: null,
         _timer: null,
 
+        /* ---------------- خصائص مشتقة ---------------- */
+
+        get currentTool() {
+            return this.tools.find((t) => t.id === this.selectedTool) || null;
+        },
+
         get currentToolHint() {
-            const tool = this.tools.find((t) => t.id === this.targetTool);
-            return tool ? tool.hint : '';
+            const tool = this.currentTool;
+            return tool ? tool.description_ar : '';
+        },
+
+        get currentFramework() {
+            return this.frameworks.find((f) => f.id === this.selectedFramework) || null;
+        },
+
+        get currentFrameworkHint() {
+            const fw = this.currentFramework;
+            return fw ? fw.description_ar : '';
+        },
+
+        get trimmedInput() {
+            return this.inputText.trim();
+        },
+
+        get canGenerate() {
+            return this.trimmedInput.length >= 3 && !this.isLoading;
+        },
+
+        get metaChips() {
+            if (!this.result) return [];
+            const r = this.result;
+            return [
+                { label: 'الإطار', value: r.framework_name || r.framework || '—' },
+                { label: 'الأداة', value: r.tool_name || r.tool || '—' },
+                { label: 'الرمز', value: `${r.tokens_used ?? '—'} رمز` },
+                { label: 'النموذج', value: r.mock_used ? 'وضع التجربة' : (r.model || this.model) },
+            ];
+        },
+
+        /* ---------------- تحميل القوائم ---------------- */
+
+        async loadCatalog() {
+            try {
+                const data = await apiFetch('/api/prompt/frameworks');
+                if (Array.isArray(data.tools) && data.tools.length) this.tools = data.tools;
+                if (Array.isArray(data.frameworks) && data.frameworks.length) {
+                    this.frameworks = data.frameworks;
+                }
+                if (data.default_framework) this.selectedFramework = data.default_framework;
+                if (data.default_tool) this.selectedTool = data.default_tool;
+                this.promptReady = data.ready !== false;
+                this.promptMock = Boolean(data.mock_mode);
+                this.model = data.model || this.model;
+            } catch (_) {
+                // نُبقي النسخة المحلية — القوائم تعمل بلا اتصال
+            }
+        },
+
+        /* ---------------- اقتراح الإطار ---------------- */
+
+        async applySuggestedFramework() {
+            const text = this.trimmedInput;
+            if (text.length < 3) return null;
+
+            const data = await apiFetch(
+                `/api/prompt/suggest?text=${encodeURIComponent(text)}`
+            );
+            this.selectedFramework = data.framework;
+            this.suggestNotice = data.reason_ar || '';
+            return data;
+        },
+
+        async suggestFramework() {
+            this.error = '';
+
+            if (this.trimmedInput.length < 3) {
+                this.error = 'اكتب وصفًا أولًا — الاقتراح يحتاج 3 أحرف على الأقل';
+                this.$store.toast.error(this.error);
+                return;
+            }
+
+            this.isLoading = true;
+            try {
+                const data = await this.applySuggestedFramework();
+                if (data) {
+                    this.$store.toast.ok(`الإطار المقترح: ${data.framework_name}`);
+                }
+            } catch (err) {
+                this.error = err.message || 'فشل اقتراح الإطار';
+                this.$store.toast.error(this.error);
+            } finally {
+                this.isLoading = false;
+            }
+        },
+
+        /* ---------------- التوليد ---------------- */
+
+        async submitGenerate() {
+            this.error = '';
+
+            const text = this.trimmedInput;
+            if (text.length < 3) {
+                this.error = 'الوصف قصير جدًا — اكتب 3 أحرف على الأقل';
+                this.$store.toast.error(this.error);
+                return;
+            }
+
+            this.isLoading = true;
+
+            try {
+                // اقتراح الإطار تلقائيًا قبل التوليد (لا يُفشل التوليد إن أخفق)
+                if (this.autoFramework) {
+                    try {
+                        await this.applySuggestedFramework();
+                    } catch (_) {
+                        this.suggestNotice = '';
+                    }
+                }
+
+                const data = await apiFetch('/api/prompt/generate', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        input: text,
+                        tool: this.selectedTool,
+                        framework: this.selectedFramework,
+                        language: this.selectedLanguage,
+                        save: true,
+                    }),
+                });
+
+                this.result = { ...data, enhanced: false };
+                this.copied = false;
+
+                const src = data.mock_used ? 'وضع التجربة' : (data.model || 'النموذج');
+                this.$store.toast.ok(`تم التوليد عبر ${src} (${data.tokens_used} رمز)`);
+
+                this.$nextTick(() => {
+                    const el = document.getElementById('result-card');
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            } catch (err) {
+                this.error = err.message || 'فشل توليد البرومبت';
+                this.$store.toast.error(this.error);
+            } finally {
+                this.isLoading = false;
+            }
+        },
+
+        /* ---------------- تحسين النتيجة ---------------- */
+
+        async enhanceResult() {
+            this.error = '';
+
+            const current = this.result?.prompt;
+            if (!current) {
+                this.error = 'لا يوجد برومبت لتحسينه — ولّد برومبتًا أولًا';
+                this.$store.toast.error(this.error);
+                return;
+            }
+
+            this.isEnhancing = true;
+
+            try {
+                const data = await apiFetch('/api/prompt/enhance', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        prompt: current,
+                        language: this.selectedLanguage,
+                        save: false,
+                    }),
+                });
+
+                this.result = {
+                    ...this.result,
+                    prompt: data.prompt,
+                    tokens_used: data.tokens_used,
+                    mock_used: data.mock_used,
+                    model: data.model,
+                    enhanced: true,
+                };
+
+                this.$store.toast.ok('تم تحسين البرومبت');
+            } catch (err) {
+                this.error = err.message || 'فشل تحسين البرومبت';
+                this.$store.toast.error(this.error);
+            } finally {
+                this.isEnhancing = false;
+            }
+        },
+
+        /* ---------------- نسخ النتيجة ---------------- */
+
+        async copyResult() {
+            const text = this.result?.prompt;
+            if (!text) {
+                this.$store.toast.error('لا يوجد برومبت لنسخه');
+                return;
+            }
+
+            try {
+                await copyToClipboard(text);
+                this.copied = true;
+                this.$store.toast.ok('تم نسخ البرومبت إلى الحافظة');
+                setTimeout(() => {
+                    this.copied = false;
+                }, 2000);
+            } catch (_) {
+                this.$store.toast.error('تعذّر النسخ — حدّد النص وانسخه يدويًا');
+            }
         },
 
         /* ---------------- الوصف النصي ---------------- */
 
         clearError(kind) {
-            if (kind === 'text') this.generateNotice = '';
-            if (kind === 'audio') this.audioError = '';
+            if (kind === 'text') this.error = '';
         },
 
         /* ---------------- اختيار/سحب الملف ---------------- */
@@ -219,18 +497,20 @@ function composer() {
         async uploadAudio(file) {
             this.audioError = '';
             this.uploadStatus = '';
-            this.isMock = false;
+            this.transcribeMock = false;
 
             if (!file) return;
 
             // فحص سريع قبل الشبكة
             if (file.size === 0) {
                 this.audioError = 'الملف فارغ';
+                this.$store.toast.error(this.audioError);
                 return;
             }
             if (file.size > this.maxUploadMb * 1024 * 1024) {
                 this.audioError =
                     `حجم الملف ${formatSize(file.size)} — الحد الأقصى ${this.maxUploadMb} ميجابايت`;
+                this.$store.toast.error(this.audioError);
                 return;
             }
 
@@ -247,7 +527,7 @@ function composer() {
                 const text = (data.text || '').trim();
                 if (text) {
                     this.inputText = this.inputText ? `${this.inputText}\n\n${text}` : text;
-                    this.isMock = Boolean(data.mock);
+                    this.transcribeMock = Boolean(data.mock);
                     this.uploadStatus = 'تم التفريغ بنجاح';
                     this.transcribeReady = true;
                     this.$store.toast.ok(
@@ -257,6 +537,7 @@ function composer() {
                     );
                 } else {
                     this.audioError = 'لم يُكتشف كلام في هذا الملف';
+                    this.$store.toast.error(this.audioError);
                 }
             } catch (err) {
                 this.audioError = err.message || 'فشل تفريغ الصوت';
@@ -270,12 +551,12 @@ function composer() {
 
         /* ---------------- التسجيل المباشر ---------------- */
 
-        async toggleRecording() {
+        toggleRecording() {
             if (this.isRecording) {
                 this.stopRecording();
-                return;
+            } else {
+                this.startRecording();
             }
-            await this.startRecording();
         },
 
         async startRecording() {
@@ -284,6 +565,7 @@ function composer() {
             if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
                 this.mediaRecorderSupported = false;
                 this.audioError = 'متصفحك لا يدعم التسجيل المباشر — استخدم رفع الملف';
+                this.$store.toast.error(this.audioError);
                 return;
             }
 
@@ -292,6 +574,7 @@ function composer() {
             } catch (_) {
                 this.audioError =
                     'تم رفض إذن الميكروفون — فعّله من إعدادات المتصفح ثم أعد المحاولة';
+                this.$store.toast.error(this.audioError);
                 return;
             }
 
@@ -328,6 +611,7 @@ function composer() {
 
                 if (file.size < 1200) {
                     this.audioError = 'التسجيل قصير جدًا — تحدث أكثر ثم أعد المحاولة';
+                    this.$store.toast.error(this.audioError);
                     return;
                 }
 
@@ -367,12 +651,17 @@ function composer() {
         },
 
         /* ---------------- تسجيل الخروج ---------------- */
-        /* ملاحظة: زر الهيدر خارج نطاق هذا المكوّن، لذلك يستخدم الدالة العامة pcLogout */
+
+        logout() {
+            return pcLogout();
+        },
+
+        /* ---------------- الإقلاع ---------------- */
 
         init() {
             // تحذير قبل مغادرة الصفحة أثناء التسجيل أو الرفع
             window.addEventListener('beforeunload', (event) => {
-                if (this.isRecording || this.uploading) {
+                if (this.isRecording || this.uploading || this.isLoading) {
                     event.preventDefault();
                     event.returnValue = '';
                 }
@@ -380,6 +669,8 @@ function composer() {
 
             // تحرير الميكروفون عند الخروج
             window.addEventListener('pagehide', () => this.releaseMic());
+
+            this.loadCatalog();
         },
     };
 }

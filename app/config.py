@@ -51,15 +51,30 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: str = ""
     # النموذج الافتراضي (مجاني على OpenRouter)
     OPENROUTER_MODEL: str = "nvidia/nemotron-3-super-120b-a12b:free"
+    # نماذج احتياطية تُجرَّب بالترتيب عند فشل الأساسي بأحد رموز
+    # RETRYABLE_MODEL_STATUSES (429 مزدحم / 503 مؤقت / 404 غير موجود).
+    # ملاحظة: صيغتها في .env يجب أن تكون JSON مصفوفة.
+    OPENROUTER_MODELS_FALLBACK: list[str] = [
+        "qwen/qwen-2.5-7b-instruct:free",
+        "google/gemini-2.0-flash-exp:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "apodex/apodex-1.1-mini:free",
+    ]
     # نقطة النهاية المتوافقة مع OpenAI SDK
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     # ترويسات تُرسل مع كل طلب (إحصاءات OpenRouter + هوية التطبيق)
     OPENROUTER_HTTP_REFERER: str = "https://promptcraft.app"
     OPENROUTER_APP_TITLE: str = "PromptCraft"
     # سقف زمني للاستجابة بالثواني (لحماية الواجهة من التعليق)
-    LLM_TIMEOUT_SECONDS: float = 60.0
+    OPENROUTER_TIMEOUT: float = 60.0
     # وضع التجربة: يُرجع برومبتًا قالبيًا بدون اتصال (للاختبار بدون مفتاح)
     PROMPT_MOCK: bool = False
+    # أقصى عدد رموز في مخرج النموذج — يحدّ زمن الاستجابة وحجم الرد
+    PROMPT_MAX_TOKENS: int = 800
+    # تخزين آخر النتائج في الذاكرة لتفادي استدعاء مكرّر لنفس الطلب
+    PROMPT_CACHE_ENABLED: bool = True
+    PROMPT_CACHE_SIZE: int = 50
+    PROMPT_CACHE_TTL: int = 3600
 
     # ---- الرفع الصوتي ----
     UPLOAD_DIR: Path = BASE_DIR / "data" / "uploads"

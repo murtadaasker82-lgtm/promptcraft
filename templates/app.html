@@ -38,6 +38,9 @@
             max_upload_mb: {{ max_upload_mb }},
             allowed_extensions: {{ allowed_extensions | tojson }},
             transcribe_ready: {{ transcribe_ready | tojson }},
+            prompt_ready: {{ prompt_ready | tojson }},
+            prompt_mock: {{ prompt_mock | tojson }},
+            openrouter_model: {{ openrouter_model | tojson }},
         };
     </script>
 
@@ -95,16 +98,20 @@
                     </button>
 
                     <!-- قائمة -->
-                    <div x-show="open" @click.outside="open = false" x-transition.origin.top.left
-                         class="absolute left-0 mt-2 w-48 rounded-xl bg-slate-900 border border-slate-700 shadow-xl overflow-hidden z-40">
+                    <div x-show="open" @click.outside="open = false" x-transition.origin.top.left x-cloak
+                         class="absolute left-0 mt-2 w-52 rounded-xl bg-slate-900 border border-slate-700 shadow-xl overflow-hidden z-40">
                         <div class="px-4 py-3 border-b border-slate-800">
                             <p class="text-xs text-slate-500">مسجّل باسم</p>
                             <p class="text-sm font-semibold text-slate-200 truncate" x-text="auth_user.username"></p>
                         </div>
+                        <div class="px-4 py-2.5 border-b border-slate-800 text-[11px] text-slate-500 leading-relaxed">
+                            <span class="opacity-70">النموذج:</span>
+                            <span class="font-mono text-slate-400" x-text="model"></span>
+                        </div>
                         <a href="/library" class="block px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800 transition">
                             مكتبتي (قريبًا)
                         </a>
-                        <button @click="pcLogout()"
+                        <button @click="logout()"
                                 class="w-full text-right px-4 py-2.5 text-sm text-rose-300 hover:bg-rose-500/10 transition flex items-center gap-2">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round"
@@ -126,7 +133,7 @@
     <div class="mb-7">
         <h1 class="text-2xl sm:text-3xl font-extrabold text-white">أنشئ برومبت احترافي</h1>
         <p class="mt-1.5 text-sm text-slate-400">
-            اكتب وصفك أو ارفع تسجيلًا صوتيًا، واختر الأداة المستهدفة.
+            اكتب وصفك أو ارفع تسجيلًا صوتيًا، واختر الأداة والإطار — والباقي على المحرك.
         </p>
     </div>
 
@@ -141,6 +148,19 @@
             أضف <code class="text-amber-100">OPENAI_API_KEY</code> في ملف
             <code class="text-amber-100">.env</code> ثم أعد تشغيل الخادم.
             يمكنك رفع ملف للتجربة الآن.
+        </p>
+    </div>
+
+    <!-- تنبيه حالة محرك البرومبت -->
+    <div x-show="!promptReady" x-transition
+         class="mb-6 flex items-start gap-3 rounded-xl bg-rose-500/10 border border-rose-500/30 p-4">
+        <svg class="w-5 h-5 text-rose-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 012 0v4a1 1 0 11-2 0V9zm1-4a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd"/>
+        </svg>
+        <p class="text-sm text-rose-200 leading-relaxed">
+            <span class="font-semibold">محرك البرومبتات غير مضبوط.</span>
+            أضف <code class="text-rose-100">OPENROUTER_API_KEY</code> في ملف
+            <code class="text-rose-100">.env</code> ثم أعد تشغيل الخادم.
         </p>
     </div>
 
@@ -163,14 +183,28 @@
 
                 <textarea x-model="inputText"
                           @input="clearError('text')"
+                          @keydown.ctrl.enter.prevent="submitGenerate()"
+                          @keydown.meta.enter.prevent="submitGenerate()"
                           rows="6"
-                          placeholder="مثال: أبغى مقال عن فوائد الذكاء الاصطناعي في التعليم، باللغة العربية، بأسلوب بسيط وموجّه لطلاب المرحلة الثانوية…"
+                          placeholder="مثال: أبغى صورة تنين يطير فوق مدينة مستقبلية، أو مقال عن فوائد الذكاء الاصطناعي في التعليم…"
                           class="w-full rounded-xl bg-slate-900/70 border border-slate-700 px-4 py-3.5 text-slate-100 placeholder-slate-600 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/30 resize-y leading-relaxed"></textarea>
 
-                <p x-show="inputText.length > 0"
-                   x-transition.opacity
-                   class="mt-2 text-xs text-slate-500">
-                    النص اجتاز جاهز للتوليد ✅ — الوصف الواضح يعطي برومبتًا أدق.
+                <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <p x-show="inputText.length > 0" x-transition.opacity class="text-xs text-slate-500">
+                        النص جاهز للتوليد — الوصف الواضح يعطي برومبتًا أدق.
+                    </p>
+                    <p x-show="inputText.length === 0" class="text-xs text-slate-600">
+                        أو استخدم <kbd class="kbd-hint">Ctrl</kbd> + <kbd class="kbd-hint">Enter</kbd> للتوليد السريع.
+                    </p>
+                </div>
+
+                <!-- خطأ عام -->
+                <p x-show="error" x-transition
+                   class="mt-3 flex items-start gap-2 rounded-lg bg-rose-500/10 border border-rose-500/30 p-3 text-sm text-rose-200">
+                    <svg class="w-4 h-4 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 012 0v4a1 1 0 11-2 0V9zm1-4a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd"/>
+                    </svg>
+                    <span x-text="error"></span>
                 </p>
             </div>
 
@@ -181,7 +215,7 @@
                         <span class="grid h-7 w-7 place-items-center rounded-lg bg-brand-500/15 text-brand-300 text-xs font-bold">2</span>
                         أو صفِ ما تريده صوتًا
                     </h2>
-                    <span class="text-xs text-slate-500">حتى {{ maxUploadMb }} ميجابايت</span>
+                    <span class="text-xs text-slate-500">حتى {{ max_upload_mb }} ميجابايت</span>
                 </div>
 
                 <!-- منطقة السحب والإفلات -->
@@ -253,14 +287,15 @@
                 <div class="mt-4 flex flex-wrap items-center gap-3">
                     <button type="button"
                             @click="toggleRecording()"
+                            :disabled="!mediaRecorderSupported"
                             :class="isRecording ? 'recording-active' : 'recording-idle'"
-                            class="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-rose-400/40">
+                            class="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-rose-400/40 disabled:opacity-50 disabled:cursor-not-allowed">
                         <span class="rec-dot"></span>
                         <span x-text="isRecording ? 'إيقاف التسجيل' : 'تسجيل صوتي مباشر'"></span>
                     </button>
 
-                    <div x-show="isRecording" x-transition class="inline-flex items-center gap-2 text-sm text-rose-300 font-mono">
-                        <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+                    <div x-show="isRecording" x-transition class="rec-timer inline-flex items-center gap-2 text-sm text-rose-300 font-mono">
+                        <span class="rec-indicator" aria-hidden="true"></span>
                         <span x-text="formatTime(recSeconds)"></span>
                     </div>
 
@@ -269,13 +304,13 @@
                     </span>
 
                     <p x-show="!mediaRecorderSupported" class="text-xs text-amber-300">
-                        ⚠️ متصفحك لا يدعم التسجيل المباشر — استخدم رفع الملف.
+                        متصفحك لا يدعم التسجيل المباشر — استخدم رفع الملف.
                     </p>
                 </div>
             </div>
         </section>
 
-        <!-- ==================== العمود الأيسر: الأداة + النتيجة ==================== -->
+        <!-- ==================== العمود الأيسر: الإعدادات ==================== -->
         <aside class="lg:col-span-2 space-y-6">
 
             <!-- (3) الأداة المستهدفة -->
@@ -285,54 +320,181 @@
                     الأداة المستهدفة
                 </h2>
 
-                <select x-model="targetTool"
+                <select x-model="selectedTool"
                         class="w-full rounded-xl bg-slate-900/70 border border-slate-700 px-4 py-3 text-slate-100 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/30">
                     <template x-for="tool in tools" :key="tool.id">
-                        <option :value="tool.id" x-text="tool.name + ' — ' + tool.hint"></option>
+                        <option :value="tool.id" x-text="tool.name_ar"></option>
                     </template>
                 </select>
 
-                <p class="mt-2 text-xs text-slate-500" x-text="currentToolHint"></p>
+                <p class="mt-2 text-xs text-slate-500 leading-relaxed" x-text="currentToolHint"></p>
             </div>
 
-            <!-- (4) زر التوليد -->
+            <!-- (4) الإطار + اللغة -->
             <div class="glass-card rounded-2xl p-5 sm:p-6">
                 <h2 class="flex items-center gap-2 font-bold text-white mb-4">
                     <span class="grid h-7 w-7 place-items-center rounded-lg bg-brand-500/15 text-brand-300 text-xs font-bold">4</span>
-                    التوليد
+                    الإطار واللغة
                 </h2>
+
+                <label class="block text-xs font-semibold text-slate-400 mb-1.5">إطار البرومبت</label>
+                <select x-model="selectedFramework"
+                        class="w-full rounded-xl bg-slate-900/70 border border-slate-700 px-4 py-3 text-slate-100 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/30">
+                    <template x-for="fw in frameworks" :key="fw.id">
+                        <option :value="fw.id" x-text="fw.name_ar"></option>
+                    </template>
+                </select>
+
+                <p class="mt-2 text-xs text-slate-500 leading-relaxed" x-text="currentFrameworkHint"></p>
+
+                <p x-show="suggestNotice" x-transition
+                   class="mt-2 flex items-start gap-2 rounded-lg bg-brand-500/10 border border-brand-500/25 p-2.5 text-xs text-brand-200 leading-relaxed">
+                    <svg class="w-4 h-4 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a1 1 0 00-1 1v3.586L7.707 12.88a1 1 0 10.586 1.414l2-2A1 1 0 0010 15.586V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    <span x-text="suggestNotice"></span>
+                </p>
+
+                <div class="mt-4">
+                    <label class="block text-xs font-semibold text-slate-400 mb-1.5">لغة البرومبت الناتج</label>
+                    <select x-model="selectedLanguage"
+                            class="w-full rounded-xl bg-slate-900/70 border border-slate-700 px-4 py-3 text-slate-100 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/30">
+                        <option value="ar">عربي</option>
+                        <option value="en">English</option>
+                    </select>
+                </div>
+
+                <!-- اقتراح تلقائي -->
+                <label class="mt-4 flex items-start gap-3 rounded-xl bg-slate-900/50 border border-slate-800 p-3 cursor-pointer hover:border-slate-700 transition">
+                    <input type="checkbox" x-model="autoFramework"
+                           class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-600 bg-slate-800 text-brand-500 focus:ring-brand-500/40 focus:ring-offset-0">
+                    <span class="leading-tight">
+                        <span class="block text-sm font-semibold text-slate-200">اقترح الإطار تلقائياً</span>
+                        <span class="block text-[11px] text-slate-500 mt-0.5">
+                            يحلّل وصفك ويختار الأنسب قبل التوليد.
+                        </span>
+                    </span>
+                </label>
 
                 <button type="button"
-                        disabled
-                        title="محرك البرومبتات يصل في المرحلة 3"
-                        class="w-full rounded-xl bg-slate-800/70 border border-slate-700 px-5 py-3.5 font-bold text-slate-500 cursor-not-allowed">
-                    توليد البرومبت — قريبًا (المرحلة 3)
+                        @click="suggestFramework()"
+                        :disabled="isLoading"
+                        class="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-slate-800/70 border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-700/70 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z"/>
+                    </svg>
+                    اقترح الإطار الآن
                 </button>
-
-                <p x-show="generateNotice" x-transition class="mt-2 text-xs text-amber-300/90">
-                    <span x-text="generateNotice"></span>
-                </p>
             </div>
 
-            <!-- (5) النتيجة -->
-            <div class="glass-card rounded-2xl p-5 sm:p-6 min-h-[240px]">
-                <h2 class="flex items-center gap-2 font-bold text-white mb-4">
-                    <span class="grid h-7 w-7 place-items-center rounded-lg bg-brand-500/15 text-brand-300 text-xs font-bold">5</span>
-                    البرومبت الجاهز
-                </h2>
+            <!-- (5) زر التوليد -->
+            <div class="glass-card rounded-2xl p-5 sm:p-6">
+                <button type="button"
+                        @click="submitGenerate()"
+                        :disabled="isLoading"
+                        class="generate-btn group relative w-full inline-flex items-center justify-center gap-2.5 rounded-2xl px-5 py-4 text-base font-extrabold text-white transition disabled:cursor-not-allowed disabled:opacity-60">
 
-                <!-- حالة فارغة -->
-                <div class="flex flex-col items-center justify-center text-center py-10 border border-dashed border-slate-800 rounded-xl">
-                    <svg class="w-10 h-10 text-slate-700 mb-3" fill="none" stroke="currentColor" stroke-width="1.4" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                              d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zM19.5 14.25v4.75a2 2 0 01-2 2H5a2 2 0 01-2-2V6.5a2 2 0 012-2h4.75"/>
-                    </svg>
-                    <p class="text-sm text-slate-500">سيظهر البرومبت هنا</p>
-                    <p class="mt-1 text-xs text-slate-600">مهيكل · جاهز للنسخ</p>
-                </div>
+                    <template x-if="isLoading">
+                        <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/>
+                            <path class="opacity-90" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                                  d="M12 2a10 10 0 0110 10"/>
+                        </svg>
+                    </template>
+
+                    <template x-if="!isLoading">
+                        <svg class="w-5 h-5 transition group-hover:rotate-12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                  d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z"/>
+                        </svg>
+                    </template>
+
+                    <span x-text="isLoading ? 'جارٍ التوليد…' : 'توليد البرومبت'"></span>
+                </button>
+
+                <p class="mt-2.5 text-center text-[11px] text-slate-500 leading-relaxed">
+                    يُحفظ البرومبت في سجلّك تلقائيًا.
+                    <span x-show="promptMock" class="text-amber-400/90"> وضع التجربة مفعّل (نتيجة قالبية).</span>
+                </p>
             </div>
         </aside>
     </div>
+
+    <!-- ==================== النتيجة ==================== -->
+    <section id="result-card" x-show="result" x-cloak x-transition.opacity.duration.300ms
+             class="mt-8 glass-card rounded-2xl p-5 sm:p-7">
+
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+            <h2 class="flex items-center gap-2 font-bold text-white">
+                <span class="grid h-7 w-7 place-items-center rounded-lg bg-emerald-500/15 text-emerald-300 text-xs font-bold">✓</span>
+                البرومبت الجاهز
+                <span x-show="result?.enhanced"
+                      class="text-[11px] font-normal rounded-full bg-violet-500/15 border border-violet-500/30 px-2.5 py-0.5 text-violet-200">
+                    محسَّن
+                </span>
+            </h2>
+
+            <!-- الأدوات -->
+            <div class="flex flex-wrap items-center gap-2">
+                <button type="button"
+                        @click="copyResult()"
+                        class="inline-flex items-center gap-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 px-4 py-2.5 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25 focus:outline-none focus:ring-2 focus:ring-emerald-400/40">
+                    <template x-if="!copied">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                  d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75a2.25 2.25 0 01-2.25-2.25V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"/>
+                        </svg>
+                    </template>
+                    <template x-if="copied">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                        </svg>
+                    </template>
+                    <span x-text="copied ? 'تم النسخ!' : 'نسخ'"></span>
+                </button>
+
+                <button type="button"
+                        @click="enhanceResult()"
+                        :disabled="isEnhancing"
+                        class="inline-flex items-center gap-2 rounded-xl bg-violet-500/15 border border-violet-500/30 px-4 py-2.5 text-sm font-semibold text-violet-200 transition hover:bg-violet-500/25 focus:outline-none focus:ring-2 focus:ring-violet-400/40 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <svg x-show="!isEnhancing" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/>
+                    </svg>
+                    <svg x-show="isEnhancing" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/>
+                        <path class="opacity-90" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                              d="M12 2a10 10 0 0110 10"/>
+                    </svg>
+                    <span x-text="isEnhancing ? 'جارٍ التحسين…' : 'تحسين'"></span>
+                </button>
+            </div>
+        </div>
+
+        <!-- البرومبت -->
+        <pre class="prompt-output" dir="auto"><code x-text="result?.prompt"></code></pre>
+
+        <!-- البيانات الوصفية -->
+        <div class="mt-4 flex flex-wrap items-center gap-2">
+            <template x-for="chip in metaChips" :key="chip.label">
+                <span class="meta-chip">
+                    <span class="opacity-60" x-text="chip.label"></span>
+                    <span class="font-semibold" x-text="chip.value"></span>
+                </span>
+            </template>
+
+            <span x-show="result?.saved"
+                  class="meta-chip meta-chip-ok">
+                <span class="font-semibold">محفوظ في سجلّك</span>
+            </span>
+        </div>
+
+        <p class="mt-4 text-[11px] text-slate-500 leading-relaxed">
+            راجع البرومبت وجرّبه في الأداة المستهدفة — يمكنك الضغط على «تحسين» لإغلاق الثغرات الشائعة
+            (غموض الهدف، غياب الجمهور والنبرة، عدم تحديد حدود المخرج، غياب معيار للنجاح).
+        </p>
+    </section>
 </main>
 
 <!-- ==================== Toast ==================== -->

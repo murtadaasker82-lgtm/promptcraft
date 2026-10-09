@@ -5,8 +5,14 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-# قواعد اسم المستخدم: 3-32 حرفًا إنجليزيًا/رقميًا مع _ . -
-USERNAME_PATTERN = r"^[A-Za-z0-9_.-]{3,32}$"
+# قواعد اسم المستخدم: حروف عربية أو إنجليزية فقط.
+# النطاق \u0600-\u06FF يغطي العربية الأساسية مع التاء المربوطة والهمزات.
+ARABIC_LETTERS = r"ؠ-ي"
+USERNAME_PATTERN = rf"^[A-Za-z {ARABIC_LETTERS}]{{2,30}}$"
+# أسماء بنفس الصياغة لكن كلّها لاتينية، لرسالة خطأ أدق
+USERNAME_LATIN_PATTERN = r"^[A-Za-z ]{2,30}$"
+# الرسالة الموحّدة لكل مخالفة صياغة — تظهر للمستخدم كما هي
+USERNAME_FORMAT_ERROR = "الاسم يجب أن يحتوي على حروف فقط (عربية أو إنجليزية)"
 RESERVED_USERNAMES = {
     "admin",
     "administrator",
@@ -33,23 +39,30 @@ class LoginRequest(BaseModel):
 
     username: str = Field(
         ...,
-        min_length=3,
-        max_length=32,
-        description="اسم المستخدم (3-32 حرفًا: حروف إنجليزية، أرقام، _ . -)",
-        examples=["murad"],
+        min_length=2,
+        max_length=30,
+        description="اسم المستخدم: حروف عربية أو إنجليزية فقط (2-30 حرفًا)، مع المسافة",
+        examples=["أحمد علي", "John Doe"],
     )
 
     @field_validator("username")
     @classmethod
     def _validate_username(cls, value: str) -> str:
-        value = value.strip()
+        # الضغط على مسافة طرفه شائع جدًا عند 입력 — نطمسها بدل رفض الطلب
+        value = " ".join(value.split())
+
+        if len(value) < 2:
+            raise ValueError("الاسم قصير جدًا — حرفان على الأقل")
+
         if not re.match(USERNAME_PATTERN, value):
-            raise ValueError(
-                "اسم المستخدم يجب أن يكون بين 3 و 32 حرفًا، ويحتوي فقط على "
-                "حروف إنجليزية وأرقام والرموز _ . -"
-            )
+            # نميّز الخطأ الطويل/القصير عن الخطأ في نوع الحروف
+            if 2 <= len(value) <= 30:
+                raise ValueError(USERNAME_FORMAT_ERROR)
+            raise ValueError("الاسم يجب أن يكون بين 2 و 30 حرفًا")
+
         if value.lower() in RESERVED_USERNAMES:
             raise ValueError("هذا الاسم محجوز، اختر اسمًا آخر")
+
         return value
 
 

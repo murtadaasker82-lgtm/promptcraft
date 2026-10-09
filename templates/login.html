@@ -100,9 +100,12 @@
                                    :disabled="loading"
                                    autocomplete="username"
                                    autofocus
-                                   placeholder="مثال: murad"
+                                   placeholder="مثال: أحمد علي"
                                    class="w-full rounded-xl bg-slate-900/70 border border-slate-700 px-4 py-3.5 pl-11 text-slate-100 placeholder-slate-500 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/30 disabled:opacity-60"
-                                   maxlength="32"
+                                   :class="hasInvalidChars && 'border-rose-500/60 focus:border-rose-400 focus:ring-rose-500/30'"
+                                   pattern="[A-Za-z؀-ي ]+"
+                                   title="حروف عربية أو إنجليزية فقط"
+                                   maxlength="30"
                                    required>
                             <svg class="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
                                  fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
@@ -111,9 +114,18 @@
                             </svg>
                         </div>
 
+                        <!-- تنبيه الحروف غير المسموحة -->
+                        <p x-show="hasInvalidChars" x-transition.opacity
+                           class="mt-2 flex items-start gap-2 rounded-lg bg-rose-500/10 border border-rose-500/30 p-2.5 text-xs text-rose-200 leading-relaxed">
+                            <svg class="w-4 h-4 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 012 0v4a1 1 0 11-2 0V9zm1-4a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>الاسم يجب أن يحتوي على حروف فقط (عربية أو إنجليزية) — لا أرقام ولا رموز</span>
+                        </p>
+
                         <!-- تلميح القاعدة -->
                         <p class="mt-2 text-xs text-slate-500 leading-relaxed">
-                            3–32 حرفًا · حروف إنجليزية وأرقام و <code class="text-slate-400">_ . -</code> فقط
+                            2–30 حرفًا · حروف عربية أو إنجليزية · المسافة مسموحة
                         </p>
                         <p x-show="displayName && displayName !== username"
                            x-transition.opacity
@@ -124,7 +136,7 @@
 
                     <!-- زر الدخول -->
                     <button type="submit"
-                            :disabled="loading || !username.trim()"
+                            :disabled="loading || !username.trim() || hasInvalidChars"
                             class="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-brand-600 to-violet-600 px-5 py-3.5 font-bold text-white shadow-lg shadow-brand-900/40 transition hover:from-brand-500 hover:to-violet-500 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none">
                         <span x-show="!loading">دخول</span>
                         <span x-show="loading" class="inline-flex items-center gap-2">

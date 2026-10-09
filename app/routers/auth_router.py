@@ -19,6 +19,7 @@ from app.database import get_db
 from app.models import Session, User
 from app.schemas import (
     RESERVED_USERNAMES,
+    USERNAME_FORMAT_ERROR,
     USERNAME_PATTERN,
     CurrentUserResponse,
     LoginRequest,
@@ -134,13 +135,14 @@ def check_username(
     if not username:
         return UsernameCheckResponse(available=False, reason="أرسل اسم المستخدم: ?username=...")
 
-    username = username.strip()
+    username = " ".join(username.split())
 
     if not re.match(USERNAME_PATTERN, username):
+        if 2 <= len(username) <= 30:
+            return UsernameCheckResponse(available=False, reason=USERNAME_FORMAT_ERROR)
         return UsernameCheckResponse(
             available=False,
-            reason="اسم المستخدم يجب أن يكون بين 3 و 32 حرفًا، ويحتوي فقط على "
-            "حروف إنجليزية وأرقام والرموز _ . -",
+            reason="الاسم يجب أن يكون بين 2 و 30 حرفًا",
         )
 
     if username.lower() in RESERVED_USERNAMES:

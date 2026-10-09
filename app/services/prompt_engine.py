@@ -15,8 +15,11 @@
 يكتب البرومبت بالشكل الذي تتوقعه تلك الأداة تحديدًا.
 """
 
+import hashlib
 import logging
 import re
+import time
+from collections import OrderedDict
 
 from app.config import settings
 from app.services.llm_client import LLMError, chat_completion
@@ -150,6 +153,61 @@ TOOL_TEMPLATES: dict[str, dict] = {
 DEFAULT_TOOL = "general"
 
 
+# ============================================================
+# ذاكرة مؤقتة للنتائج
+# ============================================================
+#
+# نفس المدخلات تعطي نفس البرومبت، فلا داعي لاستدعاء النموذج مرة ثانية. المفتاح
+# هاش للمدخلات، والقيمة زوج (وقت الحفظ، النتيجة). الإذناط مُرضٍ من الأقدم
+# (OrderedDict) حتى يبقى أداؤها ثابتًا مهما بلغ الحجم.
+
+_prompt_cache: "OrderedDict[str, tuple[float, dict]]" = OrderedDict()
+
+
+def _cache_key(raw_input: str, tool: str, framework: str, language: str) -> str:
+    """هاش ثابت للمدخلات — لا نخزّن الوصف نفسه كمفتاح."""
+    payload = f"{raw_input.strip()}|{tool}|{framework}|{language}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _cache_get(key: str) -> dict | None:
+    """يعيد النتيجة المخزّنة إن كانت صالحة، أو None."""
+    if not settings.PROMPT_CACHE_ENABLED:
+        return None
+
+    entry = _prompt_cache.get(key)
+    if entry is None:
+        return None
+
+    stored_at, value = entry
+    if time.time() - stored_at > settings.PROMPT_CACHE_TTL:
+        _prompt_cache.pop(key, None)
+        return None
+
+    _prompt_cache.move_to_end(key)
+    return {**value, "cached": True}
+
+
+def _cache_put(key: str, value: dict) -> None:
+    """يخزّن النتيجة ويفرض الحد الأقصى للحجم."""
+    if not settings.PROMPT_CACHE_ENABLED:
+        return
+
+    _prompt_cache[key] = (time.time(), value)
+    _prompt_cache.move_to_end(key)
+
+    limit = max(1, settings.PROMPT_CACHE_SIZE)
+    while len(_prompt_cache) > limit:
+        _prompt_cache.popitem(last=False)
+
+
+def clear_prompt_cache() -> int:
+    """يفرغ الذاكرة المؤقتة ويعيد عدد ما حُذف."""
+    removed = len(_prompt_cache)
+    _prompt_cache.clear()
+    return removed
+
+
 def framework_sections_text(framework: str) -> str:
     """يحوّل أقسام الإطار إلى نص إرشادي يُمرَّر في تعليمات النموذج."""
     spec = FRAMEWORKS.get(framework, FRAMEWORKS[DEFAULT_FRAMEWORK])
@@ -164,36 +222,27 @@ def framework_sections_text(framework: str) -> str:
 # ============================================================
 
 SYSTEM_PROMPT = """\
-أنت مهندس برومبتات محترف. مهمتك تحويل الوصف الخام الذي يكتبه المستخدم إلى برومبت
-مهيكل جاهز للاستخدام فورًا.
+أنت مهندس برومبتات. حوّل وصف المستخدم الخام إلى برومبت مهيكل جاهز للاستخدام فورًا.
 
 قواعد ملزمة:
-1. حوّل الوصف الخام إلى برومبت منظّم يعتمد على الإطار المحدد في التعليمات، واملأ
-   كل قسم بمحتوى واقعي مستنتج من وصف المستخدم. لا تترك أي قسم فارغًا، وإن كان
-   المعطى ناقصًا فاستنتج قيمة معقولة بدل أن تسأل المستخدم.
-2. أعد البرومبت بصيغة Markdown فقط. لا تضع أي شرح خارجي ولا مقدمة ولا عبارة مثل
-   "إليك البرومبت" أو "آمل أن يساعدك" — البرومبت وحده، جاهز للنسخ.
-3. اجعل البرومبت قابلًا للتنفيذ: ضع أرقامًا وحدودًا مكان المعطيات المبهمة، وتواريخ
-   وأسماء إن لزم. استبدل العبارات العامة مثل "شركة كبرى" بتفاصيل ملموسة تخدم غرض
-   المستخدم.
-4. إن كان الوصف باللغة العربية أو طُلبت اللغة العربية، أعد البرومبت بالعربية. وإن
-   طُلبت الإنجليزية أعده بالإنجليزية.
-5. لا تنتقد الوصف ولا تعلّق عليه ولا تضف ملاحظات جانبية. المهمة الوحيدة هي البرومبت.
+1. نظّم الوصف وفق الإطار المطلوب واملأ كل قسم بمحتوى واقعي مستنتج منه. لا تترك
+   قسمًا فارغًا؛ إن نقص المعطى فاستنتج قيمة معقولة بدل أن تسأل المستخدم.
+2. اجعل القابل للتنفيذ أولويتك: أرقام وحدود وتواريخ وأسماء بدل العبارات المبهمة.
+3. أعد البرومبت وحده بصيغة Markdown — بلا مقدمة ولا شرح ولا تعليق على الوصف.
+4. اكتب باللغة المطلوبة كما وردت في التعليمات (عربية أو إنجليزية).
 """
 
 SYSTEM_PROMPT_EN = """\
-You are a professional prompt engineer. Convert the user's raw description into a
-structured prompt that is ready to use immediately.
+You are a prompt engineer. Convert the user's raw description into a structured
+prompt that is ready to use immediately.
 
 Mandatory rules:
-1. Restructure the raw description into a prompt following the requested framework,
-   filling every section with concrete content inferred from the description. Never
-   leave a section empty; infer a sensible value instead of asking a question.
-2. Return the prompt in Markdown only. No preamble, no commentary, no "here is your
-   prompt" — just the prompt itself, ready to copy.
-3. Make it executable: use real numbers, limits and dates instead of vague wording.
-4. Write the prompt in English.
-5. Do not critique the description and do not add side notes.
+1. Restructure per the requested framework, filling every section with concrete
+   inferred content. Never leave a section empty; infer a sensible value instead
+   of asking a question.
+2. Prefer the executable: real numbers, limits, dates and names over vague wording.
+3. Return only the prompt as Markdown — no preamble, no commentary, no critique.
+4. Write in the requested language (Arabic or English).
 """
 
 
@@ -369,6 +418,18 @@ async def generate_prompt(
 
     use_mock = settings.PROMPT_MOCK if mock is None else mock
 
+    # الذاكرة المؤقتة تخصّ النتائج الحقيقية فقط — وضع التجربة فوري أصلًا،
+    # وتخزينه يفسد الاختبارات التي تتوقّع كاشًا باردًا.
+    cache_key = _cache_key(raw_input, tool, framework, language)
+    if not use_mock:
+        hit = _cache_get(cache_key)
+        if hit is not None:
+            logger.info(
+                "ضربة ذاكرة مؤقتة — الإطار %s، الأداة %s (بدون استدعاء النموذج)",
+                framework, tool,
+            )
+            return hit
+
     if use_mock:
         logger.info(
             "توليد برومبت في وضع التجربة (mock) — إطار %s، أداة %s", framework, tool
@@ -404,7 +465,7 @@ async def generate_prompt(
         )
         prompt_text = _strip_preamble(raw_text)
 
-    return {
+    result = {
         "prompt": prompt_text,
         "framework": framework,
         "framework_name": FRAMEWORKS[framework]["name_ar"],
@@ -414,7 +475,13 @@ async def generate_prompt(
         "mock_used": use_mock,
         "tokens_used": _estimate_tokens(prompt_text),
         "model": "mock" if use_mock else settings.OPENROUTER_MODEL,
+        "cached": False,
     }
+
+    if not use_mock:
+        _cache_put(cache_key, result)
+
+    return result
 
 
 # ============================================================

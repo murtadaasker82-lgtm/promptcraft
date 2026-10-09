@@ -113,6 +113,143 @@
     to { opacity: 0.15; }
 }
 
+/* ---------- مؤشر التسجيل المباشر ---------- */
+.rec-indicator {
+    position: relative;
+    width: 10px;
+    height: 10px;
+    border-radius: 9999px;
+    background: #f43f5e;
+    flex-shrink: 0;
+}
+
+/* نبضة الخارج — حلقتان متتاليتان تعطي إحساس "يعمل الآن" */
+.rec-indicator::before,
+.rec-indicator::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    background: #f43f5e;
+    animation: rec-ring 1.6s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
+}
+
+.rec-indicator::after {
+    animation-delay: 0.8s;
+}
+
+@keyframes rec-ring {
+    0%   { transform: scale(1);   opacity: 0.7; }
+    100% { transform: scale(3.2); opacity: 0; }
+}
+
+/* نبض خفيف على العدّاد نفسه */
+.rec-timer {
+    padding: 0.25rem 0.65rem;
+    border-radius: 9999px;
+    background: rgba(244, 63, 94, 0.1);
+    border: 1px solid rgba(244, 63, 94, 0.28);
+    animation: rec-timer-glow 1.8s ease-in-out infinite;
+}
+
+@keyframes rec-timer-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); }
+    50%      { box-shadow: 0 0 0 4px rgba(244, 63, 94, 0.12); }
+}
+
+/* ---------- زر التوليد ---------- */
+.generate-btn {
+    background: linear-gradient(135deg, var(--pc-brand) 0%, var(--pc-violet) 100%);
+    box-shadow: 0 10px 30px -10px rgba(51, 102, 255, 0.7);
+    overflow: hidden;
+}
+
+.generate-btn:hover:not(:disabled) {
+    box-shadow: 0 16px 38px -10px rgba(51, 102, 255, 0.85);
+    transform: translateY(-1px);
+}
+
+/* لمعة تمرّ فوق الزر عند التحويم */
+.generate-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        110deg,
+        transparent 20%,
+        rgba(255, 255, 255, 0.22) 45%,
+        transparent 70%
+    );
+    transform: translateX(-120%);
+    transition: transform 0.7s ease;
+}
+
+.generate-btn:hover:not(:disabled)::after {
+    transform: translateX(120%);
+}
+
+/* ---------- البرومبت الناتج ---------- */
+.prompt-output {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 0.875rem;
+    line-height: 1.85;
+    direction: ltr;
+    text-align: start;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: rgba(2, 6, 23, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 1rem;
+    padding: 1.25rem 1.5rem;
+    color: #e2e8f0;
+    max-height: 34rem;
+    overflow-y: auto;
+    margin: 0;
+}
+
+/* dir="auto" على العنصر يحدّد الاتجاه من أول حرف، فينفّذ ما يلي للنص العربي */
+.prompt-output[dir="rtl"] {
+    direction: rtl;
+    text-align: right;
+    font-family: 'Cairo', 'SFMono-Regular', Consolas, monospace;
+}
+
+/* إبراز النص المحدد داخل البرومبت */
+.prompt-output::selection {
+    background: rgba(51, 102, 255, 0.4);
+}
+
+/* ---------- شرائح البيانات الوصفية ---------- */
+.meta-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: 9999px;
+    padding: 0.3rem 0.8rem;
+    font-size: 0.72rem;
+    background: rgba(30, 41, 59, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    color: #cbd5e1;
+}
+
+.meta-chip-ok {
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: #6ee7b7;
+}
+
+/* ---------- تلميحات لوحة المفاتيح ---------- */
+.kbd-hint {
+    display: inline-block;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 0.65rem;
+    padding: 0.1rem 0.35rem;
+    border-radius: 0.3rem;
+    background: rgba(30, 41, 59, 0.9);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    color: #94a3b8;
+}
+
 /* ---------- Toast ---------- */
 .toast-ok {
     background: rgba(6, 78, 59, 0.85);

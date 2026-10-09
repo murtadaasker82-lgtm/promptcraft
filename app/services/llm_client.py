@@ -13,6 +13,7 @@ OpenRouter يوفّر واجهة متوافقة مع OpenAI SDK، لذلك نس�
 import asyncio
 import logging
 import random
+import time
 from typing import Any
 
 from openai import (
@@ -37,10 +38,18 @@ _client: AsyncOpenAI | None = None
 class LLMError(Exception):
     """خطأ في استدعاء النموذج — يحمل رمز HTTP ورسالة عربية جاهزة للعرض."""
 
-    def __init__(self, message: str, status_code: int = 500) -> None:
+    def __init__(
+        self,
+        message: str,
+        status_code: int = 500,
+        http_status: int | None = None,
+    ) -> None:
         super().__init__(message)
         self.message = message
         self.status_code = status_code
+        # الرمز الأصلي من الخدمة قبل التحويل (مثل 503 الذي نعرضه 502).
+        # سلسلة النماذج الاحتياطية تحكم على هذا لا على status_code المعروض.
+        self.http_status = http_status
 
 
 def get_llm_client() -> AsyncOpenAI:
@@ -54,7 +63,7 @@ def get_llm_client() -> AsyncOpenAI:
         _client = AsyncOpenAI(
             base_url=settings.OPENROUTER_BASE_URL,
             api_key=settings.OPENROUTER_API_KEY,
-            timeout=settings.LLM_TIMEOUT_SECONDS,
+            timeout=settings.OPENROUTER_TIMEOUT,
             max_retries=0,  # نتحكم بأنفسنا في إعادة المحاولة برسائل عربية
             default_headers={
                 # مطلوبان لإحصاءات OpenRouter فقط، لكن نرسلهما دائمًا
@@ -85,15 +94,17 @@ def reset_llm_client() -> None:
     _client = None
 
 
-def _map_status_error(exc: APIStatusError) -> LLMError:
+def _map_status_error(exc: APIStatusError, model: str | None = None) -> LLMError:
     """يحوّل خطأ HTTP من الخدمة إلى رسالة عربية مفهومة + رمز مناسب."""
     status = exc.status_code
+    attempted = model or settings.OPENROUTER_MODEL
 
     if status in (401, 403):
         return LLMError(
             "مفتاح OpenRouter غير صالح أو منتهي. افتح https://openrouter.ai/keys "
             "وأنشئ مفتاحًا جديدًا ثم حدّث OPENROUTER_API_KEY في ملف .env.",
             status_code=401,
+            http_status=status,
         )
 
     if status == 402:
@@ -101,6 +112,7 @@ def _map_status_error(exc: APIStatusError) -> LLMError:
             "رصيد حسابك في OpenRouter غير كافٍ لإتمام الطلب. "
             "أضف رصيدًا أو استخدم نموذجًا مجانيًا ( ending بـ :free ).",
             status_code=402,
+            http_status=status,
         )
 
     if status == 429:
@@ -108,110 +120,162 @@ def _map_status_error(exc: APIStatusError) -> LLMError:
             "تم تجاوز حد الاستخدام مؤقتًا (429). غالبًا لأن النموذج مزدحم أو "
             "أن مفتاحك بلا رصيد. انتظر دقيقة ثم أعد المحاولة، أو غيّر النموذج.",
             status_code=429,
+            http_status=status,
         )
 
     if status == 404:
         return LLMError(
-            f"النموذج المطلوب غير موجود على OpenRouter: {settings.OPENROUTER_MODEL}. "
+            f"النموذج المطلوب غير موجود على OpenRouter: {attempted}. "
             "تحقق من الاسم في https://openrouter.ai/models",
             status_code=404,
+            http_status=status,
         )
 
     if status >= 500:
         return LLMError(
             "خدمة OpenRouter تواجه خطأ داخليًا مؤقتًا — أعد المحاولة بعد قليل.",
             status_code=502,
+            http_status=status,
         )
 
     return LLMError(
         f"رفضت OpenRouter الطلب (رمز {status}). راجع نص الطلب أو مفتاحك ثم أعد المحاولة.",
         status_code=502,
+        http_status=status,
     )
 
 
-async def chat_completion(
+async def _collect_stream(
+    client: AsyncOpenAI,
+    model: str,
     messages: list[dict[str, Any]],
-    model: str | None = None,
-    temperature: float = 0.7,
-    max_tokens: int | None = None,
-    max_attempts: int = 3,
+    temperature: float,
+    max_tokens: int,
 ) -> str:
     """
-    يستدعي نموذج محادثة ويعيد نص الإجابة فقط.
+    يجمع نص الرد من بثّ تدريجي (streaming) بدل انتظار الرد الكامل.
 
-    :param messages: قائمة رسائل بصيغة OpenAI: [{"role": ..., "content": ...}]
-    :param model: اسم النموذج؛ الافتراضي من الإعدادات
-    :param temperature: 0 = حتمي، 1 = إبداعي
-    :param max_tokens: حد أعلى لطول الإجابة (اختياري)
-    :param max_attempts: عدد المحاولات في أخطاء الشبكة أو 429/5xx
-    :returns: نص الإجابة بعد تنظيفه
-    :raises LLMError: عند غياب المفتاح أو فشل كل المحاولات
+    البث يقلّل زمن الاستجابة المحسوس: أول جزء من النص يصل قبل أن يُنهي النموذج
+    توليده، ولا نفعّل البث عمليًا في قياس زمن الواجهة لأن الواجهة تنتظر الرد
+    الكامل في كل الأحوال.
     """
-    if not settings.openrouter_ready:
-        raise LLMError(
-            "مفتاح OpenRouter غير مضبوط. أضف OPENROUTER_API_KEY في ملف .env ثم أعد "
-            "تشغيل الخادم. (تجده في: https://openrouter.ai/keys)",
-            status_code=503,
-        )
+    stream = await client.chat.completions.create(
+        model=model,
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        stream=True,
+    )
 
-    if not messages:
-        raise LLMError("لا توجد رسائل لإرسالها", status_code=400)
+    parts: list[str] = []
+    async for chunk in stream:
+        if not chunk.choices:
+            continue
+        piece = chunk.choices[0].delta.content
+        if piece:
+            parts.append(piece)
 
-    model = model or settings.OPENROUTER_MODEL
-    client = get_llm_client()
+    return "".join(parts).strip()
 
+
+# رموز خطأ تعني "هذا النموذج لا يعمل الآن" فنجرّب التالي بدل الفشل النهائي.
+# 404 مُدرجة لأن قوائم النماذج المجانية تتغيّر باستمرار واسم قديم يعود 404.
+RETRYABLE_MODEL_STATUSES = frozenset({404, 429, 503})
+
+
+def _model_candidates(model: str) -> list[str]:
+    """
+    ترتيب النماذج المُجرَّبة: الأساسي أولًا ثم قائمة الاحتياطية بلا تكرار.
+    """
+    chain = [model]
+    for raw in settings.OPENROUTER_MODELS_FALLBACK:
+        fallback = (raw or "").strip()
+        if fallback and fallback not in chain:
+            chain.append(fallback)
+    return chain
+
+
+async def _call_model(
+    client: AsyncOpenAI,
+    model: str,
+    messages: list[dict[str, Any]],
+    temperature: float,
+    max_tokens: int,
+    max_attempts: int,
+    stream: bool,
+) -> str:
+    """محاولات متكرّرة على نموذج واحد. يرمي `LLMError` عند الفشل النهائي."""
     last_error: LLMError | None = None
 
     for attempt in range(1, max_attempts + 1):
+        started = time.perf_counter()
         try:
-            response = await client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            text = (response.choices[0].message.content or "").strip()
+            if stream:
+                text = await _collect_stream(
+                    client, model, messages, temperature, max_tokens
+                )
+            else:
+                response = await client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+                text = (response.choices[0].message.content or "").strip()
+
             if not text:
                 raise LLMError(
                     "أعاد النموذج إجابة فارغة. جرّب صياغة الوصف بتفصيل أكبر "
                     "أو غيّر النموذج.",
                     status_code=502,
                 )
+            elapsed = time.perf_counter() - started
             logger.info(
-                "اكتمل الاستدعاء (model=%s، محاولات=%s، طول=%s حرف)",
+                "اكتمل الاستدعاء في %.2fث (model=%s، بث=%s، محاولات=%s، "
+                "%s حرف، حد=%s رمز)",
+                elapsed,
                 model,
+                "نعم" if stream else "لا",
                 attempt,
                 len(text),
+                max_tokens,
             )
             return text
 
         except AuthenticationError as exc:
             # لا فائدة من إعادة المحاولة — المفتاح خطأ
-            raise _map_status_error(exc) from exc
+            raise _map_status_error(exc, model) from exc
 
         except NotFoundError as exc:
-            raise _map_status_error(exc) from exc
+            # 404 لا يتحسّن بتكرار المحاولة على نفس النموذج — نُرجع الفشل
+            # فورًا ليتولّاه متصفح النماذج فيجرّب اسمًا آخر.
+            raise _map_status_error(exc, model) from exc
 
         except RateLimitError as exc:
-            last_error = _map_status_error(exc)
+            last_error = _map_status_error(exc, model)
             if attempt == max_attempts:
                 raise last_error from exc
             wait = 2**attempt + random.random()
-            logger.warning("حد معدل من OpenRouter — إعادة المحاولة %s/%s بعد %.1fs",
-                           attempt, max_attempts, wait)
+            logger.warning(
+                "حد معدل من OpenRouter بعد %.2fث (model=%s) — إعادة المحاولة "
+                "%s/%s بعد %.1fs",
+                time.perf_counter() - started, model, attempt, max_attempts, wait,
+            )
             await asyncio.sleep(wait)
 
         except InternalServerError as exc:
-            last_error = _map_status_error(exc)
+            last_error = _map_status_error(exc, model)
             if attempt == max_attempts:
                 raise last_error from exc
             wait = 1.5 * attempt
-            logger.warning("خطأ 5xx من OpenRouter — إعادة المحاولة %s/%s",
-                           attempt, max_attempts)
+            logger.warning(
+                "خطأ 5xx من OpenRouter بعد %.2fث (model=%s) — إعادة المحاولة %s/%s",
+                time.perf_counter() - started, model, attempt, max_attempts,
+            )
             await asyncio.sleep(wait)
 
         except APIStatusError as exc:
-            mapped = _map_status_error(exc)
+            mapped = _map_status_error(exc, model)
             # 4xx الأخرى لا تُفيد بإعادة المحاولة
             if exc.status_code < 500 or attempt == max_attempts:
                 raise mapped from exc
@@ -225,8 +289,10 @@ async def chat_completion(
             )
             if attempt == max_attempts:
                 raise last_error from exc
-            logger.warning("فشل الاتصال بـ OpenRouter — إعادة المحاولة %s/%s",
-                           attempt, max_attempts)
+            logger.warning(
+                "فشل الاتصال بـ OpenRouter بعد %.2fث — إعادة المحاولة %s/%s",
+                time.perf_counter() - started, attempt, max_attempts,
+            )
             await asyncio.sleep(1.5 * attempt)
 
         except APIError as exc:
@@ -234,5 +300,69 @@ async def chat_completion(
                 f"خطأ من عميل OpenRouter: {exc}",
                 status_code=502,
             ) from exc
+
+    raise last_error or LLMError("فشل توليد البرومبت", status_code=502)
+
+
+async def chat_completion(
+    messages: list[dict[str, Any]],
+    model: str | None = None,
+    temperature: float = 0.7,
+    max_tokens: int | None = None,
+    max_attempts: int = 3,
+    stream: bool = True,
+) -> str:
+    """
+    يستدعي نموذج محادثة ويعيد نص الإجابة فقط.
+
+    جرّب النموذج المطلوب أولًا، فإن فشل برمز من `RETRYABLE_MODEL_STATUSES`
+    انتقل تلقائيًا إلى بقية `OPENROUTER_MODELS_FALLBACK`.
+
+    :param messages: قائمة رسائل بصيغة OpenAI: [{"role": ..., "content": ...}]
+    :param model: اسم النموذج؛ الافتراضي من الإعدادات
+    :param temperature: 0 = حتمي، 1 = إبداعي
+    :param max_tokens: حد أعلى لطول الإجابة؛ الافتراضي `PROMPT_MAX_TOKENS`
+    :param max_attempts: عدد المحاولات لكل نموذج
+    :param stream: True للبثّ التدريجي (أسرع استجابة)، False لطلب عادي
+    :returns: نص الإجابة بعد تنظيفه
+    :raises LLMError: عند غياب المفتاح أو فشل كل النماذج
+    """
+    if not settings.openrouter_ready:
+        raise LLMError(
+            "مفتاح OpenRouter غير مضبوط. أضف OPENROUTER_API_KEY في ملف .env ثم أعد "
+            "تشغيل الخادم. (تجده في: https://openrouter.ai/keys)",
+            status_code=503,
+        )
+
+    if not messages:
+        raise LLMError("لا توجد رسائل لإرسالها", status_code=400)
+
+    model = model or settings.OPENROUTER_MODEL
+    max_tokens = max_tokens or settings.PROMPT_MAX_TOKENS
+    client = get_llm_client()
+
+    candidates = _model_candidates(model)
+    last_error: LLMError | None = None
+
+    for index, candidate in enumerate(candidates):
+        try:
+            return await _call_model(
+                client, candidate, messages, temperature, max_tokens, max_attempts, stream
+            )
+        except LLMError as exc:
+            last_error = exc
+            has_next = index < len(candidates) - 1
+            # نحكم على الرمز الأصلي من الخدمة لا على المعروض (503 تُعرض 502)
+            http_status = exc.http_status if exc.http_status is not None else exc.status_code
+            if http_status not in RETRYABLE_MODEL_STATUSES or not has_next:
+                raise
+            logger.warning(
+                "النموذج %s فشل (%s) — جرّب %s (%s من %s)",
+                candidate,
+                http_status,
+                candidates[index + 1],
+                index + 2,
+                len(candidates),
+            )
 
     raise last_error or LLMError("فشل توليد البرومبت", status_code=502)

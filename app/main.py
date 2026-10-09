@@ -215,6 +215,9 @@ def _render(request: Request, name: str, context: dict):
         "allowed_extensions": settings.ALLOWED_AUDIO_EXTENSIONS,
         "transcribe_ready": settings.openai_ready or settings.WHISPER_MOCK,
         "whisper_mock": settings.WHISPER_MOCK,
+        "prompt_ready": settings.openrouter_ready or settings.PROMPT_MOCK,
+        "prompt_mock": settings.PROMPT_MOCK,
+        "openrouter_model": "mock" if settings.PROMPT_MOCK else settings.OPENROUTER_MODEL,
     }
     base_context.update(context)
     return templates.TemplateResponse(request=request, name=name, context=base_context)
