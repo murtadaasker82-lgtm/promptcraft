@@ -198,3 +198,40 @@ class SuggestFrameworkResponse(BaseModel):
     reason_ar: str
     confidence: float
     alternatives: list[str]
+
+
+# ============================================================
+# مكتبة البرومبتات
+# ============================================================
+
+
+class PromptListItem(BaseModel):
+    """برومبت واحد كما يظهر في السجل."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    raw_input: str = Field(..., description="الوصف الخام كما كتبه المستخدم")
+    generated_prompt: str = Field(..., description="البرومبت الجاهز")
+    tool: str
+    framework: str
+    language: str
+    created_at: datetime
+
+
+class PromptListResponse(BaseModel):
+    """صفحة واحدة من السجل — `total` يحسب النتائج بعد عوامل التصفية."""
+
+    items: list[PromptListItem]
+    total: int = Field(..., description="عدد النتائج المطابقة للبحث/التصفية")
+    limit: int
+    offset: int
+
+
+class PromptStats(BaseModel):
+    """إحصاءات سجل المستخدم الحالي."""
+
+    total: int = Field(..., description="إجمالي البرومبتات المحفوظة")
+    by_tool: dict[str, int] = Field(..., description="عدد البرومبتات لكل أداة")
+    by_framework: dict[str, int] = Field(..., description="عدد البرومبتات لكل إطار")
+    last_7_days: int = Field(..., description="عدد البرومبتات خلال آخر 7 أيام")

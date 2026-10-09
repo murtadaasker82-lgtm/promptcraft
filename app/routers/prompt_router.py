@@ -1,18 +1,23 @@
-"""نقاط النهاية الخاصة بمحرك البرومبتات: توليد، تحسين، أطر، اقتراح."""
+"""نقاط النهاية الخاصة بمحرك البرومبتات: توليد، تحسين، أطر، اقتراح، ومكتبة السجل."""
 
 import logging
+from datetime import timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import desc, select
+from sqlalchemy import asc, desc, func, or_, select
 from sqlalchemy.orm import Session as OrmSession
 
 from app.auth import get_current_user
 from app.config import settings
 from app.database import get_db
-from app.models import PromptHistory, User
+from app.models import PromptHistory, User, utcnow
 from app.schemas import (
     PromptEnhanceRequest,
     PromptGenerateRequest,
+    PromptListItem,
+    PromptListResponse,
+    PromptStats,
     SuggestFrameworkResponse,
 )
 from app.services.llm_client import LLMError, chat_completion
@@ -28,6 +33,31 @@ from app.services.prompt_engine import (
 logger = logging.getLogger("promptcraft.prompt")
 
 router = APIRouter(prefix="/api/prompt", tags=["prompt"])
+
+# مكتبة البرومبتات — مسار منفصل `/api/prompts` عن محرك التوليد `/api/prompt`
+library_router = APIRouter(prefix="/api/prompts", tags=["prompts"])
+
+
+def _owned_prompt(db: OrmSession, prompt_id: int, user: User) -> PromptHistory:
+    """
+    يُعيد البرومبت بعد التأكد من ملكيته للمستخدم الحالي.
+
+    نستعلم بالـ id والمستخدم معًا بدل جلب ثم مقارنة — فلا يمكن لأي مستخدم أن
+    يستكشف وجود برومبتات غيره بتخمين المعرّفات، ويُرجع 404 (لا 403) حتى لا
+    نكشف الفرق بين "غير موجود" و"موجود لكنه ليس لك".
+    """
+    row = db.scalar(
+        select(PromptHistory).where(
+            PromptHistory.id == prompt_id,
+            PromptHistory.user_id == user.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="البرومبت غير موجود",
+        )
+    return row
 
 
 @router.post(
@@ -335,3 +365,158 @@ def _mock_enhance(prompt: str) -> str:
         f"`false` في `.env` لتحسين حقيقي عبر OpenRouter."
     )
     return "\n".join(lines)
+
+
+# ============================================================
+# مكتبة البرومبتات — قراءة سجل المستخدم وحذفه
+# ============================================================
+#
+# ترتيب المسارات هنا مقصود: `/stats` مُعرَّف **قبل** `/{prompt_id}`، لأن
+# FastAPI يطابق المسار بالترتيب — فلو سبق `/{prompt_id}` لحاول تحويل "stats"
+# إلى int وفشل بـ 422 بدل الوصول إلى نقطة الإحصاءات.
+
+
+@library_router.get(
+    "",
+    response_model=PromptListResponse,
+    summary="سجل برومبتات المستخدم مع بحث وتصفية وترقيم صفحات",
+)
+def list_prompts(
+    search: str | None = Query(
+        default=None,
+        max_length=200,
+        description="نص يُبحث عنه في الوصف الخام وفي البرومبت الناتج",
+        examples=["تنين"],
+    ),
+    tool: str | None = Query(default=None, max_length=32, description="تصفية بالأداة"),
+    framework: str | None = Query(default=None, max_length=32, description="تصفية بالإطار"),
+    sort: Literal["newest", "oldest"] = Query(
+        default="newest",
+        description="ترتيب النتائج زمنيًا: الأحدث أولًا أو الأقدم أولًا",
+    ),
+    limit: int = Query(default=20, ge=1, le=100, description="عدد العناصر في الصفحة"),
+    offset: int = Query(default=0, ge=0, description="عدد العناصر المتخطّاة"),
+    current_user: User = Depends(get_current_user),
+    db: OrmSession = Depends(get_db),
+) -> PromptListResponse:
+    """صفحة واحدة من سجل المستخدم، مع عدد إجمالي يطابق نفس عوامل التصفية."""
+    conditions = [PromptHistory.user_id == current_user.id]
+
+    if search and search.strip():
+        pattern = f"%{search.strip()}%"
+        conditions.append(
+            or_(
+                PromptHistory.raw_input.ilike(pattern),
+                PromptHistory.generated_prompt.ilike(pattern),
+            )
+        )
+    if tool:
+        conditions.append(PromptHistory.tool == tool)
+    if framework:
+        conditions.append(PromptHistory.framework == framework)
+
+    # total يحسب النتائج بعد التصفية (لا الإجمالي الكلي) وإلا لم يطابق عدد الصفحات
+    total = db.scalar(
+        select(func.count()).select_from(PromptHistory).where(*conditions)
+    ) or 0
+
+    # الترتيب على (created_at, id) معًا حتى لا تتأرجح العناصر المتساوية زمنًا
+    # بين صفحتين متتاليتين ويتكرر عنصر أو يُفقد آخر
+    primary = desc if sort == "newest" else asc
+
+    rows = db.scalars(
+        select(PromptHistory)
+        .where(*conditions)
+        .order_by(primary(PromptHistory.created_at), primary(PromptHistory.id))
+        .limit(limit)
+        .offset(offset)
+    ).all()
+
+    logger.info(
+        "استعراض سجل %s — %s عنصر (بحث=%s، أداة=%s، إطار=%s، ترتيب=%s)",
+        current_user.username, len(rows), search, tool, framework, sort,
+    )
+
+    return PromptListResponse(
+        items=[PromptListItem.model_validate(row) for row in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@library_router.get(
+    "/stats",
+    response_model=PromptStats,
+    summary="إحصاءات سجل المستخدم",
+)
+def prompt_stats(
+    current_user: User = Depends(get_current_user),
+    db: OrmSession = Depends(get_db),
+) -> PromptStats:
+    """عدد البرومبتات الكلي وموزّعها على الأدوات والأطر ونشاط آخر 7 أيام."""
+    owned = PromptHistory.user_id == current_user.id
+
+    total = db.scalar(
+        select(func.count()).select_from(PromptHistory).where(owned)
+    ) or 0
+
+    tool_rows = db.execute(
+        select(PromptHistory.tool, func.count())
+        .where(owned)
+        .group_by(PromptHistory.tool)
+    ).all()
+    framework_rows = db.execute(
+        select(PromptHistory.framework, func.count())
+        .where(owned)
+        .group_by(PromptHistory.framework)
+    ).all()
+
+    since = utcnow() - timedelta(days=7)
+    last_7_days = db.scalar(
+        select(func.count())
+        .select_from(PromptHistory)
+        .where(owned, PromptHistory.created_at >= since)
+    ) or 0
+
+    return PromptStats(
+        total=total,
+        by_tool=dict(tool_rows),
+        by_framework=dict(framework_rows),
+        last_7_days=last_7_days,
+    )
+
+
+@library_router.get(
+    "/{prompt_id}",
+    response_model=PromptListItem,
+    summary="برومبت واحد بالمعرّف",
+    responses={404: {"description": "لا يوجد برومبت بهذا المعرّف لهذا المستخدم"}},
+)
+def get_prompt(
+    prompt_id: int,
+    current_user: User = Depends(get_current_user),
+    db: OrmSession = Depends(get_db),
+) -> PromptListItem:
+    """يعيد برومبتًا واحدًا — ويقبل فقط ما يملكه المستخدم الحالي."""
+    row = _owned_prompt(db, prompt_id, current_user)
+    return PromptListItem.model_validate(row)
+
+
+@library_router.delete(
+    "/{prompt_id}",
+    summary="حذف برومبت",
+    responses={404: {"description": "لا يوجد برومبت بهذا المعرّف لهذا المستخدم"}},
+)
+def delete_prompt(
+    prompt_id: int,
+    current_user: User = Depends(get_current_user),
+    db: OrmSession = Depends(get_db),
+) -> dict:
+    """يحذف برومبتًا واحدًا — ويقبل فقط ما يملكه المستخدم الحالي."""
+    row = _owned_prompt(db, prompt_id, current_user)
+    db.delete(row)
+    db.commit()
+
+    logger.info("حُذف البرومبت %s بواسطة %s", prompt_id, current_user.username)
+    return {"success": True, "deleted": 1, "id": prompt_id}

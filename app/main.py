@@ -18,7 +18,7 @@ from app.database import SessionLocal, engine, init_db
 from app.models import User
 from app.routers.audio_router import router as audio_router
 from app.routers.auth_router import router as auth_router
-from app.routers.prompt_router import router as prompt_router
+from app.routers.prompt_router import library_router, router as prompt_router
 
 # ---------------- التسجيل (logging) ----------------
 
@@ -137,6 +137,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 app.include_router(auth_router)
 app.include_router(audio_router)
 app.include_router(prompt_router)
+app.include_router(library_router)
 
 
 @app.get("/api/health", tags=["meta"], summary="فحص صحة التطبيق")
@@ -192,9 +193,16 @@ def api_index() -> dict:
                 "history": "GET /api/prompt/history",
                 "clear_history": "DELETE /api/prompt/history",
             },
+            "library": {
+                "list": "GET /api/prompts?search=&tool=&framework=&limit=&offset=",
+                "stats": "GET /api/prompts/stats",
+                "get": "GET /api/prompts/{id}",
+                "delete": "DELETE /api/prompts/{id}",
+            },
             "pages": {
                 "login": "GET /login",
                 "app": "GET /app",
+                "library": "GET /library",
             },
             "meta": {
                 "health": "GET /api/health",
@@ -261,6 +269,25 @@ def app_page(request: Request, current_user: User | None = Depends(get_optional_
         "app.html",
         {
             "page_title": "إنشاء برومبت",
+            "auth_user": current_user,
+        },
+    )
+
+
+@app.get("/library", include_in_schema=False)
+def library_page(request: Request, current_user: User | None = Depends(get_optional_user)):
+    """مكتبة البرومبتات — محمية. بدون جلسة يُحوَّل إلى /login."""
+    if current_user is None:
+        return RedirectResponse(
+            url="/login",
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    return _render(
+        request,
+        "library.html",
+        {
+            "page_title": "مكتبتي",
             "auth_user": current_user,
         },
     )

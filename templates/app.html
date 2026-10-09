@@ -85,6 +85,15 @@
                     متصل
                 </span>
 
+                <a href="/library"
+                   class="inline-flex items-center gap-2 rounded-xl bg-brand-500/15 border border-brand-500/30 px-3.5 py-2 text-sm font-semibold text-brand-200 transition hover:bg-brand-500/25">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
+                    </svg>
+                    <span class="hidden sm:inline">مكتبتي</span>
+                </a>
+
                 <div class="relative">
                 <button @click="open = !open"
                             class="flex items-center gap-2 rounded-full bg-slate-900 border border-slate-700 hover:border-slate-600 py-1.5 pl-2 pr-3 transition">
@@ -108,8 +117,12 @@
                             <span class="opacity-70">النموذج:</span>
                             <span class="font-mono text-slate-400" x-text="model"></span>
                         </div>
-                        <a href="/library" class="block px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800 transition">
-                            مكتبتي (قريبًا)
+                        <a href="/library" class="block px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800 transition flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
+                            </svg>
+                            مكتبتي
                         </a>
                         <button @click="logout()"
                                 class="w-full text-right px-4 py-2.5 text-sm text-rose-300 hover:bg-rose-500/10 transition flex items-center gap-2">

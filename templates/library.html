@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} — {{ app_name }}</title>
+
+    <!-- TailwindCSS عبر CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Cairo', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            50: '#eef4ff', 100: '#d9e6ff', 200: '#bcd3ff',
+                            300: '#8eb6ff', 400: '#598eff', 500: '#3366ff',
+                            600: '#1f43f5', 700: '#1a31e1', 800: '#1c2cb6',
+                            900: '#1d2d8f',
+                        },
+                    },
+                },
+            },
+        };
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="/static/css/style.css">
+
+    <script>
+        window.__PC_CONFIG__ = {
+            user: { id: {{ auth_user.id }}, username: {{ auth_user.username | tojson }} },
+            openrouter_model: {{ openrouter_model | tojson }},
+        };
+    </script>
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/library.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+
+<body class="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased">
+
+<div class="fixed inset-0 -z-10 bg-app-gradient"></div>
+<div class="fixed inset-0 -z-10 opacity-30 bg-grid-pattern"></div>
+
+<!-- ==================== Header ==================== -->
+<header class="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6">
+        <div class="flex items-center justify-between h-16">
+
+            <!-- الشعار + رجوع للرئيسية -->
+            <a href="/app" class="flex items-center gap-3 group">
+                <svg width="34" height="34" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="shrink-0">
+                    <rect width="64" height="64" rx="16" fill="url(#pcGradLib)"/>
+                    <path d="M20 42 L32 18 L36 18 L26 42 Z" fill="white" opacity="0.95"/>
+                    <circle cx="45" cy="22" r="4" fill="white"/>
+                    <defs>
+                        <linearGradient id="pcGradLib" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+                            <stop stop-color="#3366FF"/>
+                            <stop offset="1" stop-color="#7C3AED"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <div class="leading-tight">
+                    <span class="block font-extrabold text-white transition group-hover:text-brand-300">PromptCraft</span>
+                    <span class="block text-[11px] text-slate-500">مكتبتي</span>
+                </div>
+            </a>
+
+            <!-- المستخدم + إجراءات -->
+            <div class="flex items-center gap-2 sm:gap-3" x-data="{ open: false }">
+                <a href="/app"
+                   class="inline-flex items-center gap-2 rounded-xl bg-brand-500/15 border border-brand-500/30 px-3.5 py-2 text-sm font-semibold text-brand-200 transition hover:bg-brand-500/25">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/>
+                    </svg>
+                    <span class="hidden sm:inline">العودة للإنشاء</span>
+                </a>
+
+                <div class="relative">
+                <button @click="open = !open"
+                        class="flex items-center gap-2 rounded-full bg-slate-900 border border-slate-700 hover:border-slate-600 py-1.5 pl-2 pr-3 transition">
+                        <span class="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-bl from-brand-500 to-violet-600 text-xs font-bold text-white"
+                              x-text="(auth_user.username || '?').slice(0,2).toUpperCase()"></span>
+                        <span class="hidden sm:inline text-sm font-semibold text-slate-200" x-text="auth_user.username"></span>
+                        <svg class="w-4 h-4 text-slate-500 transition" :class="open && 'rotate-180'"
+                             fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/>
+                        </svg>
+                    </button>
+
+                    <div x-show="open" @click.outside="open = false" x-transition.origin.top.left x-cloak
+                         class="absolute left-0 mt-2 w-52 rounded-xl bg-slate-900 border border-slate-700 shadow-xl overflow-hidden z-40">
+                        <div class="px-4 py-3 border-b border-slate-800">
+                            <p class="text-xs text-slate-500">مسجّل باسم</p>
+                            <p class="text-sm font-semibold text-slate-200 truncate" x-text="auth_user.username"></p>
+                        </div>
+                        <a href="/app" class="block px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800 transition">
+                            الصفحة الرئيسية
+                        </a>
+                        <button @click="logout()"
+                                class="w-full text-right px-4 py-2.5 text-sm text-rose-300 hover:bg-rose-500/10 transition flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/>
+                            </svg>
+                            تسجيل الخروج
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<!-- ==================== المحتوى ==================== -->
+<main class="mx-auto max-w-7xl px-4 sm:px-6 py-8" x-data="libraryApp()" x-cloak>
+
+    <!-- العنوان -->
+    <div class="mb-7 flex flex-wrap items-end justify-between gap-3">
+        <div>
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-white">مكتبتي</h1>
+            <p class="mt-1.5 text-sm text-slate-400">كل برومبتاتك المحفوظة — ابحث، رشّح، واستخدمها من جديد.</p>
+        </div>
+    </div>
+
+    <!-- ============ بطاقات الإحصائيات ============ -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+
+        <div class="glass-card rounded-2xl p-4 sm:p-5">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-semibold text-slate-400">إجمالي البرومبتات</span>
+                <svg class="w-5 h-5 text-brand-400/70" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
+                </svg>
+            </div>
+            <p class="text-3xl font-extrabold text-white tabular-nums"
+               x-text="isLoadingStats ? '—' : stats.total"></p>
+        </div>
+
+        <div class="glass-card rounded-2xl p-4 sm:p-5">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-semibold text-slate-400">الأداة الأكثر استخدامًا</span>
+                <svg class="w-5 h-5 text-violet-400/70" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
+                </svg>
+            </div>
+            <p class="text-2xl font-extrabold text-white truncate" x-text="topTool ? topTool[0] : '—'"></p>
+            <p class="text-[11px] text-slate-500 mt-0.5">
+                <span x-show="topTool"><span x-text="topTool ? topTool[1] : 0"></span> برومبت</span>
+                <span x-show="!topTool">لا توجد بيانات</span>
+            </p>
+        </div>
+
+        <div class="glass-card rounded-2xl p-4 sm:p-5">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-semibold text-slate-400">الإطار الأكثر استخدامًا</span>
+                <svg class="w-5 h-5 text-emerald-400/70" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
+                </svg>
+            </div>
+            <p class="text-2xl font-extrabold text-white truncate" x-text="topFramework ? topFramework[0] : '—'"></p>
+            <p class="text-[11px] text-slate-500 mt-0.5">
+                <span x-show="topFramework"><span x-text="topFramework ? topFramework[1] : 0"></span> برومبت</span>
+                <span x-show="!topFramework">لا توجد بيانات</span>
+            </p>
+        </div>
+
+        <div class="glass-card rounded-2xl p-4 sm:p-5">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-semibold text-slate-400">آخر 7 أيام</span>
+                <svg class="w-5 h-5 text-amber-400/70" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/>
+                </svg>
+            </div>
+            <p class="text-3xl font-extrabold text-white tabular-nums"
+               x-text="isLoadingStats ? '—' : stats.last_7_days"></p>
+        </div>
+    </div>
+
+    <!-- ============ البحث والفلاتر ============ -->
+    <div class="glass-card rounded-2xl p-4 sm:p-5 mb-6">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+
+            <!-- البحث -->
+            <div class="lg:col-span-2 relative">
+                <label for="libSearch" class="sr-only">بحث</label>
+                <svg class="w-5 h-5 absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
+                     fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
+                </svg>
+                <input id="libSearch"
+                       type="search"
+                       x-model="search"
+                       @input.debounce.300ms="applyFilters()"
+                       @keydown.enter.prevent="applyFilters()"
+                       placeholder="ابحث في الوصف والبرومبت…"
+                       class="w-full rounded-xl bg-slate-900/70 border border-slate-700 py-3 pr-11 pl-4 text-slate-100 placeholder-slate-600 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/30">
+            </div>
+
+            <!-- الأداة -->
+            <select x-model="toolFilter" @change="applyFilters()"
+                    class="rounded-xl bg-slate-900/70 border border-slate-700 px-4 py-3 text-slate-100 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/30">
+                <option value="">كل الأدوات</option>
+                <template x-for="t in tools" :key="t.id">
+                    <option :value="t.id" x-text="t.name_ar"></option>
+                </template>
+            </select>
+
+            <!-- الإطار + الترتيب -->
+            <div class="grid grid-cols-2 gap-3">
+                <select x-model="frameworkFilter" @change="applyFilters()"
+                        class="rounded-xl bg-slate-900/70 border border-slate-700 px-3 py-3 text-slate-100 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/30">
+                    <option value="">كل الأطر</option>
+                    <template x-for="f in frameworks" :key="f.id">
+                        <option :value="f.id" x-text="f.name_ar"></option>
+                    </template>
+                </select>
+
+                <select x-model="sort" @change="applyFilters()"
+                        class="rounded-xl bg-slate-900/70 border border-slate-700 px-3 py-3 text-slate-100 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-500/30">
+                    <option value="newest">الأحدث أولًا</option>
+                    <option value="oldest">الأقدم أولًا</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <p class="text-xs text-slate-500">
+                <span x-text="rangeLabel"></span>
+                <span x-show="isLoading" class="text-brand-300"> · جارٍ التحميل…</span>
+            </p>
+            <button x-show="hasFilters" @click="clearFilters()"
+                    class="text-xs text-brand-300 hover:text-brand-200 underline underline-offset-2 transition">
+                مسح الفلاتر
+            </button>
+        </div>
+    </div>
+
+    <!-- خطأ عام -->
+    <p x-show="error" x-transition
+       class="mb-6 flex items-start gap-2 rounded-xl bg-rose-500/10 border border-rose-500/30 p-3.5 text-sm text-rose-200">
+        <svg class="w-5 h-5 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 012 0v4a1 1 0 11-2 0V9zm1-4a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd"/>
+        </svg>
+        <span x-text="error"></span>
+    </p>
+
+    <!-- ============ القائمة ============ -->
+    <div class="space-y-3">
+
+        <!-- تحميل -->
+        <template x-if="isLoading && items.length === 0">
+            <div class="glass-card rounded-2xl p-10 text-center">
+                <svg class="w-8 h-8 mx-auto text-brand-300 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/>
+                    <path class="opacity-90" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" d="M12 2a10 10 0 0110 10"/>
+                </svg>
+                <p class="mt-3 text-sm text-slate-400">جارٍ تحميل السجل…</p>
+            </div>
+        </template>
+
+        <!-- فارغ -->
+        <template x-if="!isLoading && items.length === 0">
+            <div class="glass-card rounded-2xl p-10 text-center">
+                <svg class="w-10 h-10 mx-auto text-slate-700 mb-3" fill="none" stroke="currentColor" stroke-width="1.4" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/>
+                </svg>
+                <p class="text-sm font-semibold text-slate-300" x-text="hasFilters ? 'لا نتائج مطابقة للفلاتر' : 'مكتبتك فارغة'"></p>
+                <p class="mt-1 text-xs text-slate-500">
+                    <span x-show="hasFilters">جرّب تعديل البحث أو مسح الفلاتر.</span>
+                    <span x-show="!hasFilters">أنشئ برومبتًا أولًا وسيظهر هنا تلقائيًا.</span>
+                </p>
+                <div class="mt-5 flex items-center justify-center gap-2">
+                    <button x-show="hasFilters" @click="clearFilters()"
+                            class="rounded-xl bg-slate-800 border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-700 transition">
+                        مسح الفلاتر
+                    </button>
+                    <a href="/app"
+                       class="rounded-xl bg-gradient-to-l from-brand-600 to-violet-600 px-4 py-2 text-sm font-semibold text-white hover:from-brand-500 hover:to-violet-500 transition">
+                        أنشئ برومبتًا
+                    </a>
+                </div>
+            </div>
+        </template>
+
+        <!-- عنصر -->
+        <template x-for="item in items" :key="item.id">
+            <article class="glass-card rounded-2xl p-4 sm:p-5 transition hover:border-slate-600/50">
+
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <!-- المعاينة -->
+                    <button @click="openPrompt(item)"
+                            class="flex-1 min-w-[16rem] text-right group">
+                        <p class="text-sm font-semibold text-slate-200 leading-relaxed group-hover:text-brand-200 transition line-clamp-2"
+                           x-text="item.raw_input"></p>
+                        <div class="mt-2.5 flex flex-wrap items-center gap-2">
+                            <span class="meta-chip"><span class="font-semibold" x-text="item.tool"></span></span>
+                            <span class="meta-chip"><span class="font-semibold" x-text="item.framework"></span></span>
+                            <span class="text-[11px] text-slate-500"
+                                  x-text="PC_LIB_FORMAT_DATE(item.created_at)"></span>
+                        </div>
+                    </button>
+
+                    <!-- الإجراءات -->
+                    <div class="flex items-center gap-2">
+                        <button @click="usePrompt(item)" title="استخدمه في صفحة الإنشاء"
+                                class="inline-flex items-center gap-1.5 rounded-xl bg-brand-500/15 border border-brand-500/30 px-3 py-2 text-xs font-semibold text-brand-200 transition hover:bg-brand-500/25">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/>
+                            </svg>
+                            استخدمه
+                        </button>
+
+                        <button @click="copyPrompt(item)" title="نسخ البرومبت"
+                                class="grid h-9 w-9 place-items-center rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-200 transition hover:bg-emerald-500/25">
+                            <template x-if="copiedId !== item.id">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                          d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75a2.25 2.25 0 01-2.25-2.25V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"/>
+                                </svg>
+                            </template>
+                            <template x-if="copiedId === item.id">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                                </svg>
+                            </template>
+                        </button>
+
+                        <button @click="deletePrompt(item)"
+                                :class="deleteArmed === item.id ? 'bg-rose-500 text-white border-rose-400' : 'bg-rose-500/10 border-rose-500/30 text-rose-300 hover:bg-rose-500/20'"
+                                :title="deleteArmed === item.id ? 'اضغط مرة أخرى للتأكيد' : 'حذف'"
+                                class="h-9 px-3 rounded-xl border text-xs font-semibold transition whitespace-nowrap"
+                                x-text="deleteArmed === item.id ? 'تأكيد؟' : 'حذف'"></button>
+                    </div>
+                </div>
+            </article>
+        </template>
+    </div>
+
+    <!-- ============ الترقيم ============ -->
+    <div x-show="total > limit" x-transition
+         class="mt-7 flex items-center justify-center gap-3">
+        <button @click="prevPage()" :disabled="!hasPrev"
+                class="inline-flex items-center gap-2 rounded-xl bg-slate-900 border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+            </svg>
+            السابق
+        </button>
+
+        <span class="text-sm text-slate-400 tabular-nums">
+            صفحة <span class="font-semibold text-slate-200" x-text="page"></span>
+            من <span class="font-semibold text-slate-200" x-text="pageCount"></span>
+        </span>
+
+        <button @click="nextPage()" :disabled="!hasNext"
+                class="inline-flex items-center gap-2 rounded-xl bg-slate-900 border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed">
+            التالي
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 5l-7 7 7 7"/>
+            </svg>
+        </button>
+    </div>
+</main>
+
+<!-- ==================== Modal: البرومبت الكامل ==================== -->
+<div x-show="selected" x-cloak
+     @keydown.escape.window="closePrompt()"
+     class="fixed inset-0 z-50 flex items-center justify-center p-4">
+
+    <div x-show="selected" x-transition.opacity
+         class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+         @click="closePrompt()"></div>
+
+    <div x-show="selected"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0 scale-95 translate-y-3"
+         x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+         role="dialog" aria-modal="true" aria-label="البرومبت الكامل"
+         class="relative w-full max-w-3xl max-h-[88vh] glass-card rounded-2xl flex flex-col overflow-hidden">
+
+        <template x-if="selected">
+            <div class="flex min-h-0 flex-1 flex-col">
+
+                <!-- ترويسة -->
+                <div class="flex items-start justify-between gap-3 p-5 border-b border-slate-800">
+                    <div class="min-w-0">
+                        <h2 class="font-bold text-white truncate" x-text="selected.raw_input"></h2>
+                        <div class="mt-2 flex flex-wrap items-center gap-2">
+                            <span class="meta-chip"><span class="opacity-60">الأداة</span><span class="font-semibold" x-text="selected.tool"></span></span>
+                            <span class="meta-chip"><span class="opacity-60">الإطار</span><span class="font-semibold" x-text="selected.framework"></span></span>
+                            <span class="text-[11px] text-slate-500" x-text="PC_LIB_FORMAT_DATE(selected.created_at)"></span>
+                        </div>
+                    </div>
+                    <button @click="closePrompt()"
+                            class="shrink-0 grid h-9 w-9 place-items-center rounded-xl bg-slate-800/70 border border-slate-700 text-slate-400 hover:text-white transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- النص -->
+                <div class="flex-1 min-h-0 overflow-y-auto p-5">
+                    <pre class="prompt-output" dir="auto"><code x-text="selected.generated_prompt"></code></pre>
+                </div>
+
+                <!-- تذييل -->
+                <div class="flex flex-wrap items-center gap-2 p-4 border-t border-slate-800">
+                    <button @click="copyPrompt(selected)"
+                            class="inline-flex items-center gap-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 px-4 py-2.5 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                  d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75a2.25 2.25 0 01-2.25-2.25V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"/>
+                        </svg>
+                        نسخ
+                    </button>
+
+                    <button @click="usePrompt(selected)"
+                            class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-l from-brand-600 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:from-brand-500 hover:to-violet-500">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/>
+                        </svg>
+                        استخدمه في الإنشاء
+                    </button>
+
+                    <button @click="deletePrompt(selected)"
+                            :class="deleteArmed === selected.id ? 'bg-rose-500 text-white border-rose-400' : 'bg-rose-500/10 border-rose-500/30 text-rose-300 hover:bg-rose-500/20'"
+                            class="mr-auto rounded-xl border px-4 py-2.5 text-sm font-semibold transition"
+                            x-text="deleteArmed === selected.id ? 'تأكيد الحذف؟' : 'حذف'"></button>
+                </div>
+            </div>
+        </template>
+    </div>
+</div>
+
+<!-- ==================== Toast ==================== -->
+<div x-data="libToastStack()" x-cloak class="fixed bottom-5 left-5 z-[60] space-y-2 w-[min(92vw,26rem)]">
+    <template x-for="t in toasts" :key="t.id">
+        <div :class="t.kind === 'error' ? 'toast-error' : 'toast-ok'"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 translate-y-2"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             class="flex items-start gap-3 rounded-xl px-4 py-3 shadow-xl backdrop-blur border text-sm">
+            <svg class="w-5 h-5 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <template x-if="t.kind === 'ok'">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/>
+                </template>
+                <template x-if="t.kind !== 'ok'">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 012 0v4a1 1 0 11-2 0V9zm1-4a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd"/>
+                </template>
+            </svg>
+            <p class="flex-1 leading-relaxed" x-text="t.text"></p>
+            <button @click="dismiss(t.id)" class="text-slate-400 hover:text-white transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+    </template>
+</div>
+
+</body>
+</html>

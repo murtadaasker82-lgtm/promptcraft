@@ -671,6 +671,38 @@ function composer() {
             window.addEventListener('pagehide', () => this.releaseMic());
 
             this.loadCatalog();
+            this.consumePrefill();
+        },
+
+        /**
+         * يقرأ وصفًا محفوظًا من "استخدمه" في المكتبة ويملأ مربع الوصف.
+         *
+         * نضع `raw_input` لا البرومبت الجاهز: هذا المربع يستقبل *الوصف* ويولّد
+         * منه برومبتًا جديدًا، ولو وضعنا فيه برومبتًا جاهزًا لتولّد فوقه الثاني.
+         * نحدّد الأداة والإطار أيضًا إن كانا معروفين لدى المحرك.
+         */
+        consumePrefill() {
+            let payload;
+            try {
+                const raw = sessionStorage.getItem('pc:prefill');
+                if (!raw) return;
+                sessionStorage.removeItem('pc:prefill');
+                payload = JSON.parse(raw);
+            } catch (_) {
+                return;
+            }
+
+            if (!payload) return;
+
+            if (payload.raw) this.inputText = payload.raw;
+            if (payload.tool && this.tools.some((t) => t.id === payload.tool)) {
+                this.selectedTool = payload.tool;
+            }
+            if (payload.framework && this.frameworks.some((f) => f.id === payload.framework)) {
+                this.selectedFramework = payload.framework;
+            }
+
+            this.$store.toast.ok('تم جلب الوصف من مكتبتك — عدّل ثم ولّد');
         },
     };
 }
