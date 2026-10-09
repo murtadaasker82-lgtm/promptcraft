@@ -22,12 +22,7 @@ services:
         value: "false"
       - key: WHISPER_MOCK
         value: "true"
-      # املأهما يدويًا في لوحة Render. اتركهما فارغين = SQLite محلي.
-      - key: TURSO_DATABASE_URL
-        syncPlaceholder: true
-      - key: TURSO_AUTH_TOKEN
-        syncPlaceholder: true
-      # رابط قاعدة البيانات: نتركه لـ SQLite المحلي، والتطبيق يبني رابط
-      # libSQL من TURSO_* أعلاه تلقائيًا عند وجوده.
+      # المصدر الوحيد لقاعدة البيانات. محليًا: sqlite:///./data/promptcraft.db
+      # على Render: libsql://<db>.turso.io?authToken=<token>
       - key: DATABASE_URL
-        value: sqlite:///./data/promptcraft.db
+        syncPlaceholder: true

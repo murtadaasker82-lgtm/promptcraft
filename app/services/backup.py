@@ -22,8 +22,13 @@ STAMP_FORMAT = "%Y%m%d_%H%M%S"
 BACKUP_DIRNAME = "backups"
 
 
-class BackupError(Exception):
-    """فشل إنشاء أو استرجاع نسخة."""
+class BackupError(RuntimeError):
+    """
+    فشل إنشاء أو استرجاع نسخة.
+
+    ترث من RuntimeError عمدًا: عدم دعم النسخ مع قواعد السحابية خطأ
+    إعداد لا خطأ حالة، ومن ثم يُرفع RuntimeError مباشرة هناك.
+    """
 
 
 def database_path() -> Path | None:
@@ -108,9 +113,18 @@ def create_backup() -> Path | None:
         logger.debug("النسخ الاحتياطي معطّل (BACKUP_ENABLED=false)")
         return None
 
+    # النسخ يتم بنسخ ملف على القرص، وهو بلا معنى لقاعدة سحابيةmanaged عن بُعد.
+    if not settings.is_sqlite:
+        logger.warning(
+            "قاعدة البيانات (%s) ليست ملف SQLite محلي — تُخطّى النسخ الاحتياطي. "
+            "اعتمد على نسخ Turso السحابية.",
+            settings.database_backend,
+        )
+        return None
+
     db_path = database_path()
     if db_path is None:
-        logger.info("قاعدة البيانات ليست SQLite — تُخطّى النسخ الاحتياطي")
+        logger.warning("تعذّر تحديد مسار ملف SQLite — تُخطّى النسخ الاحتياطي")
         return None
     if not db_path.exists():
         logger.warning("ملف قاعدة البيانات غير موجود: %s — تُخطّى النسخ", db_path)
@@ -145,9 +159,12 @@ def restore_backup(filename: str) -> Path:
     :returns: مسار قاعدة البيانات بعد الاسترجاع
     :raises BackupError: اسم غير صالح، أو نسخة غير موجودة، أو فشل الكتابة
     """
+    if not settings.is_sqlite:
+        raise RuntimeError(f"Backup not supported for {settings.database_backend}")
+
     db_path = database_path()
     if db_path is None:
-        raise BackupError("الاسترجاع متاح لقواعد SQLite فقط")
+        raise RuntimeError(f"Backup not supported for {settings.database_backend}")
 
     # حارس اجتياز المسارات: نقبل اسمًا عاديًا فقط، بلا مسارات ولا `..`
     if Path(filename).name != filename or not _is_backup_file(Path(filename)):

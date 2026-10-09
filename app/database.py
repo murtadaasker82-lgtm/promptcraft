@@ -22,9 +22,11 @@ def _build_engine():
     """
     ينشئ المحرك حسب نوع القاعدة.
 
-    Turso: نترك الـ dialect لـ `sqlalchemy-libsql` عبر رابط `libsql://`.
-    SQLite: نستخدم NullPool حتى لا يبقى اتصال محجوز للقفل، مع
-    `check_same_thread=False` لأن FastAPI يخدم كل طلب في خيط مختلف.
+    Turso: `sqlalchemy-libsql` يسجّل dialect "libsql" وينتقي السائق المناسب
+    (native/MCP لـ HTTP، أوaiosqlite لـ file:). نستخدم NullPool لأن كل طلب
+    يجب أن يفتح اتصالاً جديداً — 참여 اتصال واحد بين الخيوط يسبّب تعارضاً.
+    SQLite: نفس المنطق، مع `check_same_thread=False` لأن FastAPI يخدم كل
+    طلب في خيط مختلف.
     """
     if settings.is_turso:
         try:
@@ -40,6 +42,7 @@ def _build_engine():
             echo=settings.DB_ECHO,
             future=True,
             connect_args={"check_same_thread": False},
+            poolclass=NullPool,
         )
 
     connect_args = {"check_same_thread": False} if IS_SQLITE else {}

@@ -101,7 +101,9 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
-    allow_credentials=True,
+    # لا يصحّ جمع "*" مع credentials في CORS. والتطبيق يقدّم صفحاته
+    # بنفس المصدر على Render، فالكوكي same-origin ولا يحتاج هذا الراية.
+    allow_credentials=False,
     allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )

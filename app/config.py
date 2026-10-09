@@ -105,11 +105,6 @@ class Settings(BaseSettings):
     # `allow_credentials=True` مع `*` غير متوافق مع مواصفة CORS.
     CORS_ORIGINS: str = "*"
 
-    # ---- Turso (libSQL) ----
-    # اتركهما فارغين محليًا. على Render املأهما من لوحة التحكم.
-    TURSO_DATABASE_URL: str = ""
-    TURSO_AUTH_TOKEN: str = ""
-
     @property
     def session_ttl_seconds(self) -> int:
         """مدة الجلسة بالثواني."""
@@ -133,22 +128,13 @@ class Settings(BaseSettings):
     @property
     def resolved_database_url(self) -> str:
         """
-        رابط قاعدة البيانات الفعلي.
+        رابط قاعدة البيانات الفعلي — `DATABASE_URL` بلا تعديل.
 
-        لو TURSO_DATABASE_URL مضبوط، نبني رابط libSQL منه مع توكن المصادقة.
-        غير ذلك نرجع لـ DATABASE_URL (SQLite محليًا).
+        المصدر الوحيد هو متغير واحد. محليًا هو `sqlite:///...`، وعلى Render
+        هو `libsql://<db>.turso.io?authToken=...` (التوكن part من الرابط،
+        وهو الأسلوب الرسمي لـ libSQL).
         """
-        turso = self.TURSO_DATABASE_URL.strip()
-        if not turso:
-            return self.DATABASE_URL
-
-        if "://" not in turso:
-            turso = f"libsql://{turso}"
-
-        token = self.TURSO_AUTH_TOKEN.strip()
-        if token:
-            turso = f"{turso}?authToken={token}"
-        return turso
+        return self.DATABASE_URL
 
     @property
     def database_backend(self) -> str:
@@ -163,7 +149,10 @@ class Settings(BaseSettings):
     def is_turso(self) -> bool:
         """هل الاتصال بقاعدة Turso السحابية لا بملف SQLite محلي؟"""
         url = self.resolved_database_url
-        return url.startswith(("libsql://", "turso.io", "wss://", "https://"))
+        if url.startswith(("libsql://", "turso.io")):
+            return True
+        # روابط libSQL-over-HTTP على نطاق turso.io
+        return url.startswith(("https://", "wss://")) and "turso.io" in url
 
     @property
     def is_sqlite(self) -> bool:
