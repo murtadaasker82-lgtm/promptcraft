@@ -428,15 +428,37 @@ def test_get_prompt_missing_returns_404(auth_client):
     assert auth_client.get("/api/prompts/999999").status_code == 404
 
 
-def test_get_prompt_of_other_user_returns_404(auth_client, seeded):
+def _foreign_prompt(db, two_users):
+    """
+    ينشئ سجل برومبت واحدًا يخصّ `other` ويعيده.
+
+    اختبار العزل لا يحتاج بيانات `seeded` كاملة — السجلات الستة كلها وقت
+    وحشو يُشوّش على ما يريد هذا الاختبار إثباته. ينشئ هنا بالضبط ما يحتاجه:
+    صفًا واحدًا ليس له.
+    """
+    row = PromptHistory(
+        user_id=two_users["other"].id,
+        raw_input="سرّ خاص بالمستخدم الآخر",
+        generated_prompt="محتوى لا يجوز أن يراه أحد",
+        tool="gemini",
+        framework="5c",
+        language="ar",
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def test_get_prompt_of_other_user_returns_404(auth_client, two_users, db):
     """
     القاعدة الثانية: برومبت غير موجود وبرومبت غير مملوك يعطيان الرمز نفسه.
 
     نرجع 404 لا 403 عمدًا — الـ403 كان سيكشف وجود البرومبت لغير مالكه،
     فيتحوّل إلى ثغرة عدّاد تخمين المعرّفات.
     """
-    as_owner(auth_client, seeded)
-    foreign = [r for r in seeded["rows"] if r.user_id == seeded["other"].id][0]
+    as_owner(auth_client, two_users)
+    foreign = _foreign_prompt(db, two_users)
 
     response = auth_client.get(f"/api/prompts/{foreign.id}")
 
@@ -468,14 +490,14 @@ def test_delete_prompt_missing_returns_404(auth_client):
     assert auth_client.delete("/api/prompts/999999").status_code == 404
 
 
-def test_delete_prompt_of_other_user_returns_404_and_keeps_row(auth_client, seeded, db):
+def test_delete_prompt_of_other_user_returns_404_and_keeps_row(auth_client, two_users, db):
     """
     الحذف عبر معرّف غير مملوك يُرفض — والأهم: السجل يبقى سليمًا.
 
     لو رجع 403 هنا لكشفنا وجود السجل، ولو نُفّذ الحذف لخسر مالكُه برومبته.
     """
-    as_owner(auth_client, seeded)
-    foreign = [r for r in seeded["rows"] if r.user_id == seeded["other"].id][0]
+    as_owner(auth_client, two_users)
+    foreign = _foreign_prompt(db, two_users)
 
     response = auth_client.delete(f"/api/prompts/{foreign.id}")
 
