@@ -100,13 +100,15 @@ class Settings(BaseSettings):
     TEMPLATES_DIR: Path = BASE_DIR / "templates"
 
     # ---- CORS ----
-    # في التطوير فقط. في الإنتاج اجعلها نطاقات محددة.
-    CORS_ORIGINS: list[str] = [
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ]
+    # سلسلة مفصولة بفواصل. `*` تعني أي مصدر — مريح للتجربة، لكن في الإنتاج
+    # حدّد نطاقك الحقيقي (مثل "https://promptcraft.onrender.com") لأن
+    # `allow_credentials=True` مع `*` غير متوافق مع مواصفة CORS.
+    CORS_ORIGINS: str = "*"
+
+    # ---- Turso (libSQL) ----
+    # اتركهما فارغين محليًا. على Render املأهما من لوحة التحكم.
+    TURSO_DATABASE_URL: str = ""
+    TURSO_AUTH_TOKEN: str = ""
 
     @property
     def session_ttl_seconds(self) -> int:
@@ -124,6 +126,51 @@ class Settings(BaseSettings):
         return bool(self.OPENAI_API_KEY.strip())
 
     @property
+    def cors_origins_list(self) -> list[str]:
+        """CORS_ORIGINS كقائمة — يفصل السلسلة على الفواصل ويتجاهل الفراغات."""
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+
+    @property
+    def resolved_database_url(self) -> str:
+        """
+        رابط قاعدة البيانات الفعلي.
+
+        لو TURSO_DATABASE_URL مضبوط، نبني رابط libSQL منه مع توكن المصادقة.
+        غير ذلك نرجع لـ DATABASE_URL (SQLite محليًا).
+        """
+        turso = self.TURSO_DATABASE_URL.strip()
+        if not turso:
+            return self.DATABASE_URL
+
+        if "://" not in turso:
+            turso = f"libsql://{turso}"
+
+        token = self.TURSO_AUTH_TOKEN.strip()
+        if token:
+            turso = f"{turso}?authToken={token}"
+        return turso
+
+    @property
+    def database_backend(self) -> str:
+        """اسم مختصر للواجهة والسجلّات — بلا كشف أي توكن."""
+        if self.is_turso:
+            return "turso"
+        if self.is_sqlite:
+            return "sqlite"
+        return self.resolved_database_url.split("://", 1)[0]
+
+    @property
+    def is_turso(self) -> bool:
+        """هل الاتصال بقاعدة Turso السحابية لا بملف SQLite محلي؟"""
+        url = self.resolved_database_url
+        return url.startswith(("libsql://", "turso.io", "wss://", "https://"))
+
+    @property
+    def is_sqlite(self) -> bool:
+        """هل الاتصال بملف SQLite محلي؟"""
+        return self.resolved_database_url.startswith("sqlite")
+
+    @property
     def openrouter_ready(self) -> bool:
         """هل يمكن استخدام OpenRouter لتوليد البرومبتات؟"""
         return bool(self.OPENROUTER_API_KEY.strip())
@@ -134,9 +181,9 @@ class Settings(BaseSettings):
         self.TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
         self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-        # مجلد قاعدة البيانات
-        if self.DATABASE_URL.startswith("sqlite"):
-            db_path = self.DATABASE_URL.replace("sqlite:///", "", 1)
+        # مجلد قاعدة البيانات (فقط للملف المحلي)
+        if self.is_sqlite:
+            db_path = self.resolved_database_url.replace("sqlite:///", "", 1)
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
     def cleanup_uploads(self, keep_hours: int = 6) -> int:

@@ -4,7 +4,7 @@ services:
     env: python
     plan: starter
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --access-logfile - --error-logfile -
+    startCommand: gunicorn app.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120 --access-logfile - --error-logfile -
     healthCheckPath: /api/health
     envVars:
       - key: PYTHON_VERSION
@@ -13,16 +13,21 @@ services:
         generateValue: true
       - key: COOKIE_SECURE
         value: "true"
-      # صيغة JSON list إلزامية (pydantic-settings). غيّرها لنطاقك الفعلي لاحقًا.
+      # سلسلة مفصولة بفواصل. بدّلها بنطاقك الحقيقي قبل الإطلاق.
       - key: CORS_ORIGINS
-        value: '["*"]'
+        value: "*"
       - key: OPENROUTER_MODEL
         value: apodex/apodex-1.1-mini:free
       - key: PROMPT_MOCK
         value: "false"
       - key: WHISPER_MOCK
         value: "true"
-    disk:
-      name: promptcraft-data
-      mountPath: /opt/render/project/src/data
-      sizeGB: 1
+      # املأهما يدويًا في لوحة Render. اتركهما فارغين = SQLite محلي.
+      - key: TURSO_DATABASE_URL
+        syncPlaceholder: true
+      - key: TURSO_AUTH_TOKEN
+        syncPlaceholder: true
+      # رابط قاعدة البيانات: نتركه لـ SQLite المحلي، والتطبيق يبني رابط
+      # libSQL من TURSO_* أعلاه تلقائيًا عند وجوده.
+      - key: DATABASE_URL
+        value: sqlite:///./data/promptcraft.db

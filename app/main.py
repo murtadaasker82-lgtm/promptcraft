@@ -62,7 +62,7 @@ async def lifespan(app: FastAPI):
         "%s v%s جاهز — قاعدة البيانات: %s",
         settings.APP_NAME,
         settings.APP_VERSION,
-        settings.DATABASE_URL,
+        settings.database_backend,
     )
     if settings.WHISPER_MOCK:
         logger.warning("وضع التجربة مفعّل (WHISPER_MOCK=true): التفريغ وهمي بلا اتصال")
@@ -100,7 +100,7 @@ app = FastAPI(
 # ---- CORS ----
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],

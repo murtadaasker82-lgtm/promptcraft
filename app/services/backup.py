@@ -33,8 +33,8 @@ def database_path() -> Path | None:
     `DATABASE_URL` في ملف .env نسبي (`./data/promptcraft.db`) بينما الافتراضي
     في `config.py` مطلق — نتعامل مع الصيغتين.
     """
-    url = settings.DATABASE_URL
-    if not url.startswith("sqlite"):
+    url = settings.resolved_database_url
+    if not settings.is_sqlite:
         return None
 
     raw = url.replace("sqlite:///", "", 1).lstrip("/")
