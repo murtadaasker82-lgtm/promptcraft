@@ -23,9 +23,12 @@ def _build_engine():
     ينشئ المحرك حسب نوع القاعدة.
 
     `DATABASE_URL` يكتب `libsql://`، لكن SQLAlchemy لا يعرف هذا المخطط.
-    التحويل إلى `sqlite+libsql://` يحدث في `settings.resolved_database_url`
-    قبل الوصول هنا، و`sqlalchemy-libsql` هو ما يسجّل ذلك الـ dialect
-    (اسمه الداخلي `sqlite.libsql`).
+    التحويل إلى `sqlite+libsql://` (+ `secure=true`) يحدث في
+    `settings.resolved_database_url` قبل الوصول هنا، و`sqlalchemy-libsql`
+    هو ما يسجّل ذلك الـ dialect (اسمه الداخلي `sqlite.libsql`).
+
+    ملاحظة: `wss://` هو ما يتصل به الـ driver فعلياً، لكنه ليس مخططاً
+    تقبله `create_engine` — نترك التحويل للـ dialect عبر `secure=true`.
 
     NullPool في الحالتين: كل طلب يفتح اتصالاً جديداً، فلا تتنافس خيوط
     gunicorn على اتصال واحد.

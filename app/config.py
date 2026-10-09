@@ -130,14 +130,22 @@ class Settings(BaseSettings):
         """
         رابط قاعدة البيانات كما يمرَّر إلى SQLAlchemy.
 
-        `sqlalchemy-libsql` يسجّل الـ dialect تحت الاسم `sqlite.libsql`،
-        أي أن مخطط الرابط المقبول هو `sqlite+libsql://`. لذلك نحوّل
-        `libsql://` إلى `sqlite+libsql://` — بدون ذلك يفشل الخادم عند
-        الإقلاع بـ `NoSuchModuleError: Can't load plugin: sqlalchemy.dialects:libsql`.
+        `sqlalchemy-libsql` يسجّل الـ dialect باسم `sqlite.libsql`، والمخطط
+        المقبول هو `sqlite+libsql://`. لذلك نحوّل `libsql://` إليه — بدون
+        ذلك يفشل الإقلاع بـ `NoSuchModuleError`.
+
+        الأمان: نحوّل `secure=true` إلى الرابط. الـ driver هو من يترجم
+        `sqlite+libsql://` إلى `ws://` أو `wss://` حسب هذه العلامة، ولا
+        يقبل `wss://` مباشرةً — لو مرّرنا به لـ SQLAlchemy لانهار بخطأ
+        `Can't load plugin: sqlalchemy.dialects:wss`.
         """
         url = self.DATABASE_URL
-        if url.startswith("libsql://"):
-            return "sqlite+libsql://" + url[len("libsql://"):]
+        if not url.startswith("libsql://"):
+            return url
+
+        url = "sqlite+libsql://" + url[len("libsql://"):]
+        if "secure=" not in url:
+            url += "&secure=true" if "?" in url else "?secure=true"
         return url
 
     @property
@@ -155,17 +163,19 @@ class Settings(BaseSettings):
         هل الاتصال بقاعدة Turso السحابية لا بملف SQLite محلي؟
 
         ينظر إلى `DATABASE_URL` الخام لا `resolved_database_url`، لأن
-       الأخير يبدأ بـ `sqlite+libsql://` بعد التحويل فيُحسب خطأً كملف محلي.
+        الأخير يبدأ بـ `sqlite+libsql://` بعد التحويل فيُحسب خطأً كملف محلي.
         """
-        url = self.DATABASE_URL
-        if url.startswith("libsql://") or url.startswith("sqlite+libsql://"):
-            return True
-        return "turso.io" in url
+        return self.DATABASE_URL.startswith(("libsql://", "sqlite+libsql://"))
 
     @property
     def is_sqlite(self) -> bool:
-        """هل الاتصال بملف SQLite محلي؟ libSQL مستثنى رغم بادئة `sqlite`."""
-        return self.DATABASE_URL.startswith("sqlite://") and not self.is_turso
+        """
+        هل الاتصال بملف SQLite محلي؟
+
+        `sqlite+libsql://` يبدأ بـ "sqlite" لكنه ليس ملفاً — لذلك نشترط
+        `sqlite:///` بالضبط، وهي صيغة الملفات.
+        """
+        return self.DATABASE_URL.startswith("sqlite:///") and not self.is_turso
 
     @property
     def openrouter_ready(self) -> bool:
