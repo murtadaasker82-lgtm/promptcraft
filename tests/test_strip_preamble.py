@@ -103,3 +103,53 @@ def test_does_not_touch_similar_headings():
     """عناوين تبدأ بحروف مشابهة يجب أن تبقى."""
     text = "## هذا هو الهدف\nوصف"
     assert _strip_preamble(text) == text
+
+
+# ============================================================
+# د) غلاف العنوان في السطر الأول
+# ============================================================
+
+
+def test_strips_title_marker_from_first_line_only():
+    """الحالة المذكورة: الغلاف يُزال و`##` التالية لا تُمس."""
+    text = "# البرومبت\n## السياق\nوصف"
+    assert _strip_preamble(text) == "البرومبت\n## السياق\nوصف"
+
+
+def test_keeps_all_inner_headings_intact():
+    """كل `##` بعد السطر الأول تبقى كما هي بالترتيب."""
+    text = "# الغلاف\n## السياق\n## الهدف\n## الأسلوب"
+    result = _strip_preamble(text)
+    assert result.startswith("الغلاف")
+    assert result.count("##") == 3
+    assert "## السياق\n## الهدف\n## الأسلوب" in result
+
+
+def test_keeps_h2_when_it_is_the_first_line():
+    """
+    `##` علامات أقسام يطلبها النموذج — لا تُمس مهما كانت في السطر الأول.
+    """
+    assert _strip_preamble("## السياق\nوصف") == "## السياق\nوصف"
+
+
+def test_strips_title_after_preamble_line_removed():
+    """بعد حذف التمهيد يصبح العنوان هو السطر الأول فيُزال."""
+    text = "إليك البرومبت:\n\n# الغلاف\n## السياق"
+    assert _strip_preamble(text) == "الغلاف\n## السياق"
+
+
+def test_preserves_hash_inside_line_content():
+    """علامة `#` داخل نص السطر ليست عنوانًا."""
+    text = "اكتب عن #الذكاء الاصطناعي في Schools"
+    assert _strip_preamble(text) == text
+
+
+def test_ignores_hash_without_space():
+    """`#######` سبعة هاشات ليس عنوانًا، و`#بدون` ليست عنوانًا."""
+    assert _strip_preamble("#لا مسافة\n## سياق") == "#لا مسافة\n## سياق"
+
+
+def test_first_line_not_a_heading_is_untouched():
+    """نص عادي في السطر الأول — لا تغيير إطلاقًا."""
+    text = "1. تخصيص مسار التعلم.\n2. أتمتة المهام."
+    assert _strip_preamble(text) == text

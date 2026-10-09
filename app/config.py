@@ -49,19 +49,15 @@ class Settings(BaseSettings):
     # ---- OpenRouter — محرك هندسة البرومبتات ----
     # المفتاح من: https://openrouter.ai/keys
     OPENROUTER_API_KEY: str = ""
-    # النموذج الافتراضي (مجاني على OpenRouter)
-    OPENROUTER_MODEL: str = "nvidia/nemotron-3-super-120b-a12b:free"
-    # نماذج احتياطية تُجرَّب بالترتيب عند فشل الأساسي بأحد رموز
-    # RETRYABLE_MODEL_STATUSES (429 مزدحم / 503 مؤقت / 404 غير موجود).
-    # تحذير: `qwen/qwen-2.5-7b-instruct` و`gemini-2.0-flash-exp` رجعا 404
-    # عند التحقق (أُزيلا من الواجهة) — باقيان كخيار لو عادا، وقائمة النماذج
-    # المجانية تتغيّر باستمرار: راجع https://openrouter.ai/models
-    # ملاحظة: صيغتها في .env يجب أن تكون JSON مصفوفة.
-    OPENROUTER_MODELS_FALLBACK: list[str] = [
-        "qwen/qwen-2.5-7b-instruct:free",
-        "google/gemini-2.0-flash-exp:free",
-        "apodex/apodex-1.1-mini:free",
-    ]
+    # النموذج المستخدم لتوليد البرومبت.
+    # تحقّق حيّ (2026-10): النماذج المجانية الأخرى المرشّحة ترجع 404 — لا وجود
+    # لها على OpenRouter anymore. فنُبقي apodex وحده في الطليعة.
+    # راجع https://openrouter.ai/models إن أردت التغيير.
+    OPENROUTER_MODEL: str = "apodex/apodex-1.1-mini:free"
+    # سلسلة النماذج الاحتياطية — فارغة حاليًا لأن كل المرشّحين رجعوا 404،
+    # والآلية جاهزة: أضف أسماء هنا لتُجرَّب تلقائيًا عند 404/429/503.
+    # الصيغة في .env يجب أن تكون JSON مصفوفة.
+    OPENROUTER_MODELS_FALLBACK: list[str] = []
     # نقطة النهاية المتوافقة مع OpenAI SDK
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     # ترويسات تُرسل مع كل طلب (إحصاءات OpenRouter + هوية التطبيق)

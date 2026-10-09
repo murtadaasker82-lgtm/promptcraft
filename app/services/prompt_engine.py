@@ -422,9 +422,20 @@ def _is_preamble_line(line: str) -> bool:
     return cleaned.startswith(_PREAMBLE_PREFIXES)
 
 
+# أول سطر في الرد قد يكون غلافًا بعنوان عام ("# البرومبت") لا قسمًا — نزيل
+# علامته. نقتصر على `#` واحدة عمدًا: `##` هي علامات الأقسام التي يطلب
+# النموذج إخراجها، وحذفها كان سيكسر أول قسم في كل برومبت.
+_LEADING_TITLE = re.compile(r"^#[ \t]+(?=\S)")
+
+
+def _strip_leading_title(text: str) -> str:
+    """يزيل علامة `#` من السطر الأول فقط إن كان غلافًا لعنوان."""
+    return _LEADING_TITLE.sub("", text, count=1)
+
+
 def _strip_preamble(text: str) -> str:
     """
-    ينظّف الردّ من زوائد النموذج: أسوار الكود وعبارات التمهيد.
+    ينظّف الردّ من زوائد النموذج: أسوار الكود وعبارات التمهيد وغلاف العنوان.
 
     يحذف أسطر التمهيد من **البداية فقط** — التمهيد يسبق المحتوى ولا يقع في
     وسطه، فحذفه من كل موضع كان سيبتلع جزءًا من البرومبت نفسه. وإن فرغ النص
@@ -442,7 +453,7 @@ def _strip_preamble(text: str) -> str:
         break
 
     cleaned = "\n".join(lines[index:]).strip()
-    return cleaned or text.strip()
+    return _strip_leading_title(cleaned) or text.strip()
 
 
 async def generate_prompt(
