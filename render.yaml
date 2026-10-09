@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: promptcraft
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips=*
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: SECRET_KEY
+        generateValue: true
+      - key: COOKIE_SECURE
+        value: "true"
+      # اتركه للوحة تحكم Render. صيغة JSON list.
+      # مثال: ["https://promptcraft.onrender.com"]
+      - key: CORS_ORIGINS
+        syncPlaceholder: true
+    disk:
+      name: promptcraft-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
