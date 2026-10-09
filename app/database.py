@@ -18,20 +18,40 @@ DATABASE_URL = settings.resolved_database_url
 IS_SQLITE = settings.is_sqlite
 
 
+def _normalize_libsql_url(url: str) -> str:
+    """
+    يجعل رابط Turso مقبولاً من `create_engine`.
+
+    `sqlalchemy-libsql` يسجّل الـ dialect باسم `sqlite.libsql`، فالمخطط
+    الوحيد المقبول هو `sqlite+libsql://`. `libsql://` يقبله الناس عادةً،
+    فنصلحه هنا بدل تعطيله على من كتب الرابط.
+
+    `secure=true`: يختار الـ driver بين `ws://` و `wss://`. نضيفها
+    تلقائياً إن غابت حتى لا يمرّر أحد بيانات اعتماد Turso مشفّرة.
+    """
+    if url.startswith("sqlite+libsql://"):
+        fixed = url
+    elif url.startswith("libsql://"):
+        fixed = "sqlite+libsql://" + url[len("libsql://"):]
+    else:
+        return url
+
+    if "secure=" not in fixed:
+        fixed += "&secure=true" if "?" in fixed else "?secure=true"
+    return fixed
+
+
 def _build_engine():
     """
     ينشئ المحرك حسب نوع القاعدة.
 
-    `DATABASE_URL` يكتب `libsql://`، لكن SQLAlchemy لا يعرف هذا المخطط.
-    التحويل إلى `sqlite+libsql://` (+ `secure=true`) يحدث في
-    `settings.resolved_database_url` قبل الوصول هنا، و`sqlalchemy-libsql`
-    هو ما يسجّل ذلك الـ dialect (اسمه الداخلي `sqlite.libsql`).
+    الصيغة المعتمدة في لوحة النشر هي `sqlite+libsql://` (انظر
+    `config.Settings.resolved_database_url`)، و`libsql://` تُصحَّح هنا.
 
-    ملاحظة: `wss://` هو ما يتصل به الـ driver فعلياً، لكنه ليس مخططاً
-    تقبله `create_engine` — نترك التحويل للـ dialect عبر `secure=true`.
-
-    NullPool في الحالتين: كل طلب يفتح اتصالاً جديداً، فلا تتنافس خيوط
-    gunicorn على اتصال واحد.
+    NullPool و `check_same_thread=False` في الحالتين: كل طلب يفتح اتصاله،
+    فلا تتنافس خيوط gunicorn على اتصال واحد. ملاحظة: dialect الـ libsql يفرض
+    `check_same_thread=True` ويتجاهل ما نمرّره — NullPool هو الضمانة
+    الفعلية، لا هذا الـ arg.
     """
     if settings.is_turso:
         try:
@@ -43,7 +63,7 @@ def _build_engine():
             ) from exc
 
         return create_engine(
-            DATABASE_URL,
+            _normalize_libsql_url(DATABASE_URL),
             echo=settings.DB_ECHO,
             future=True,
             connect_args={"check_same_thread": False},

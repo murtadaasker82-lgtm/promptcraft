@@ -260,6 +260,53 @@ promptcraft/
 
 ---
 
+## 🚀 Deployment — SnapDeploy / Hugging Face Spaces
+
+النشر عبر حاوية Docker. `Dockerfile` موجود في الجذر، والمنفذ `7860`.
+
+### متغيرات البيئة (Environment Variables)
+
+| المتغيّر | القيمة | ملاحظات |
+|---|---|---|
+| `DATABASE_URL` | `sqlite+libsql://<host>?authToken=<token>&secure=true` | **الأهم — انظر التحذير أدناه** |
+| `SECRET_KEY` | قيمة عشوائية طويلة | ثابت بين النشرات وإلا بطلت كل الجلسات |
+| `OPENROUTER_API_KEY` | من openrouter.ai/keys | بدونه توليد البرومبتات معطّل |
+| `OPENAI_API_KEY` | من platform.openai.com | اختياري إن كنت تستخدم `WHISPER_MOCK=false` |
+| `COOKIE_SECURE` | `true` | إلزامي على HTTPS |
+| `WHISPER_MOCK` | `true` للتجربة بلا OpenAI | |
+| `PROMPT_MOCK` | `false` | يحتاج `OPENROUTER_API_KEY` |
+
+### ⚠️ صيغة `DATABASE_URL` — سبب معظم الأعطال
+
+الصيغة المعتمدة هي **`sqlite+libsql://`**، وليست `libsql://` ولا `wss://`:
+
+| الصيغة | النتيجة |
+|---|---|
+| `sqlite+libsql://host?authToken=X&secure=true` | ✅ يعمل |
+| `libsql://host?authToken=X` | يُصحَّح تلقائيًا في `database.py` |
+| `wss://host` | ❌ `NoSuchModuleError` |
+
+السبب أن `sqlalchemy-libsql` يسجّل الـ dialect باسم `sqlite.libsql`، وهذا هو
+المخطط الوحيد الذي تقبله `create_engine`. و `wss://` هو وجهة الاتصال التي
+يبنيها الـ driver من `secure=true`، وليس مخططاً تقبله SQLAlchemy.
+
+**`secure=true` مطلوبة.** بدونها يربط الـ driver عبر `ws://` غير مشفّر، أي أن
+`authToken` يُرسل في اتصال مكشوف.
+
+### SQLite المحلي
+
+الصيغة الافتراضية `sqlite:///./data/promptcraft.db`. لا تصلح للنشر: نظام
+الملفات في Spaces مؤقت، فالحسابات تُفقد عند كل إعادة تشغيل. استخدم Turso.
+
+### أوامر مفيدة
+
+```bash
+docker build -t promptcraft .
+docker run -p 7860:7860 --env-file .env promptcraft
+```
+
+---
+
 ## 🐛 حل المشاكل السريع
 
 | المشكلة | الحل |
@@ -268,6 +315,9 @@ promptcraft/
 | الصفحة تُعيدني إلى `/login` دائمًا | الكوكي غير محفوظ — تحقّق من `SECRET_KEY` ثابت بين التشغيلات، ومن أن المتصفح يقبل الكوكي على `localhost` |
 | زر التسجيل معطّل | المتصفح لا يدعم `MediaRecorder`، أو الإذن مرفوض — استخدم رفع الملف |
 | التسجيل لا يعمل على IP الشبكة | `MediaRecorder` يحتاج `localhost` أو HTTPS |
+| `NoSuchModuleError: Can't load plugin: sqlalchemy.dialects:libsql` | `DATABASE_URL` بـ `libsql://` — استخدم `sqlite+libsql://` |
+| التطبيق يفتح ولا يسجّل الدخول على Spaces | `COOKIE_SECURE=true` و `SECRET_KEY` مضبوط — بدونهما لا يُحفظ الكوكي على HTTPS |
+| الحسابات تختفي بعد إعادة النشر | `DATABASE_URL` ما زال SQLite محلي — انقله إلى Turso |
 | `503` عند تفريغ الصوت | `OPENAI_API_KEY` غير مضبوط — أضفه في `.env` واضبط `WHISPER_MOCK=false` |
 | `413` رغم أن الملف صغير | تحقق من `MAX_UPLOAD_MB` في `.env` |
 | `422` على تسجيل الدخول | الاسم خارج القواعد: 3–32 حرفًا، إنجليزي/أرقام و `_ . -` فقط، وغير محجوز |

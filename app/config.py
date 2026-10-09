@@ -128,25 +128,27 @@ class Settings(BaseSettings):
     @property
     def resolved_database_url(self) -> str:
         """
-        رابط قاعدة البيانات كما يمرَّر إلى SQLAlchemy.
+        رابط قاعدة البيانات كما هو — بلا أي تحويل.
 
-        `sqlalchemy-libsql` يسجّل الـ dialect باسم `sqlite.libsql`، والمخطط
-        المقبول هو `sqlite+libsql://`. لذلك نحوّل `libsql://` إليه — بدون
-        ذلك يفشل الإقلاع بـ `NoSuchModuleError`.
+        DATABASE_URL متغيّر واحد يتحكم به من لوحة النشر، والصيغة
+        المعتمدة هي:
 
-        الأمان: نحوّل `secure=true` إلى الرابط. الـ driver هو من يترجم
-        `sqlite+libsql://` إلى `ws://` أو `wss://` حسب هذه العلامة، ولا
-        يقبل `wss://` مباشرةً — لو مرّرنا به لـ SQLAlchemy لانهار بخطأ
-        `Can't load plugin: sqlalchemy.dialects:wss`.
+            # محليًا (افتراضي)
+            DATABASE_URL=sqlite:///./data/promptcraft.db
+
+            # إنتاج — Turso عبر libSQL
+            DATABASE_URL=sqlite+libsql://<host>?authToken=<token>&secure=true
+
+        لماذا `sqlite+libsql://` بالذات؟ لأن `sqlalchemy-libsql` يسجّل
+        الـ dialect باسم `sqlite.libsql`، وهو المخطط الوحيد الذي تقبله
+        `create_engine`. تمرير `libsql://` أو `wss://` مباشرةً يفشل
+        بـ `NoSuchModuleError`، وتمرير `wss://` يعطي نفس الخطأ بمخطط
+        مختلف — `wss://` هو وجهة الاتصال التي يبنيها الـ driver من
+        `secure=true`، لا مخطط يقبله SQLAlchemy.
+
+        `secure=true` مطلوب: بدونه يربط الـ driver عبر `ws://` غير مشفّر.
         """
-        url = self.DATABASE_URL
-        if not url.startswith("libsql://"):
-            return url
-
-        url = "sqlite+libsql://" + url[len("libsql://"):]
-        if "secure=" not in url:
-            url += "&secure=true" if "?" in url else "?secure=true"
-        return url
+        return self.DATABASE_URL
 
     @property
     def database_backend(self) -> str:
@@ -162,8 +164,8 @@ class Settings(BaseSettings):
         """
         هل الاتصال بقاعدة Turso السحابية لا بملف SQLite محلي؟
 
-        ينظر إلى `DATABASE_URL` الخام لا `resolved_database_url`، لأن
-        الأخير يبدأ بـ `sqlite+libsql://` بعد التحويل فيُحسب خطأً كملف محلي.
+        `libsql://` مدرجة هنا لأنها تحدّد سلوك التطبيق (نسخ احتياطي، pragmas)،
+        حتى لو كان الرابط نفسه غير صالح لـ SQLAlchemy — تعالجه `database.py`.
         """
         return self.DATABASE_URL.startswith(("libsql://", "sqlite+libsql://"))
 
