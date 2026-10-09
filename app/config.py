@@ -128,13 +128,17 @@ class Settings(BaseSettings):
     @property
     def resolved_database_url(self) -> str:
         """
-        رابط قاعدة البيانات الفعلي — `DATABASE_URL` بلا تعديل.
+        رابط قاعدة البيانات كما يمرَّر إلى SQLAlchemy.
 
-        المصدر الوحيد هو متغير واحد. محليًا هو `sqlite:///...`، وعلى Render
-        هو `libsql://<db>.turso.io?authToken=...` (التوكن part من الرابط،
-        وهو الأسلوب الرسمي لـ libSQL).
+        `sqlalchemy-libsql` يسجّل الـ dialect تحت الاسم `sqlite.libsql`،
+        أي أن مخطط الرابط المقبول هو `sqlite+libsql://`. لذلك نحوّل
+        `libsql://` إلى `sqlite+libsql://` — بدون ذلك يفشل الخادم عند
+        الإقلاع بـ `NoSuchModuleError: Can't load plugin: sqlalchemy.dialects:libsql`.
         """
-        return self.DATABASE_URL
+        url = self.DATABASE_URL
+        if url.startswith("libsql://"):
+            return "sqlite+libsql://" + url[len("libsql://"):]
+        return url
 
     @property
     def database_backend(self) -> str:
@@ -143,21 +147,25 @@ class Settings(BaseSettings):
             return "turso"
         if self.is_sqlite:
             return "sqlite"
-        return self.resolved_database_url.split("://", 1)[0]
+        return self.DATABASE_URL.split("://", 1)[0]
 
     @property
     def is_turso(self) -> bool:
-        """هل الاتصال بقاعدة Turso السحابية لا بملف SQLite محلي؟"""
-        url = self.resolved_database_url
-        if url.startswith(("libsql://", "turso.io")):
+        """
+        هل الاتصال بقاعدة Turso السحابية لا بملف SQLite محلي؟
+
+        ينظر إلى `DATABASE_URL` الخام لا `resolved_database_url`، لأن
+       الأخير يبدأ بـ `sqlite+libsql://` بعد التحويل فيُحسب خطأً كملف محلي.
+        """
+        url = self.DATABASE_URL
+        if url.startswith("libsql://") or url.startswith("sqlite+libsql://"):
             return True
-        # روابط libSQL-over-HTTP على نطاق turso.io
-        return url.startswith(("https://", "wss://")) and "turso.io" in url
+        return "turso.io" in url
 
     @property
     def is_sqlite(self) -> bool:
-        """هل الاتصال بملف SQLite محلي؟"""
-        return self.resolved_database_url.startswith("sqlite")
+        """هل الاتصال بملف SQLite محلي؟ libSQL مستثنى رغم بادئة `sqlite`."""
+        return self.DATABASE_URL.startswith("sqlite://") and not self.is_turso
 
     @property
     def openrouter_ready(self) -> bool:
@@ -172,7 +180,7 @@ class Settings(BaseSettings):
 
         # مجلد قاعدة البيانات (فقط للملف المحلي)
         if self.is_sqlite:
-            db_path = self.resolved_database_url.replace("sqlite:///", "", 1)
+            db_path = self.DATABASE_URL.replace("sqlite:///", "", 1)
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
     def cleanup_uploads(self, keep_hours: int = 6) -> int:

@@ -22,15 +22,17 @@ def _build_engine():
     """
     ينشئ المحرك حسب نوع القاعدة.
 
-    Turso: `sqlalchemy-libsql` يسجّل dialect "libsql" وينتقي السائق المناسب
-    (native/MCP لـ HTTP، أوaiosqlite لـ file:). نستخدم NullPool لأن كل طلب
-    يجب أن يفتح اتصالاً جديداً — 참여 اتصال واحد بين الخيوط يسبّب تعارضاً.
-    SQLite: نفس المنطق، مع `check_same_thread=False` لأن FastAPI يخدم كل
-    طلب في خيط مختلف.
+    `DATABASE_URL` يكتب `libsql://`، لكن SQLAlchemy لا يعرف هذا المخطط.
+    التحويل إلى `sqlite+libsql://` يحدث في `settings.resolved_database_url`
+    قبل الوصول هنا، و`sqlalchemy-libsql` هو ما يسجّل ذلك الـ dialect
+    (اسمه الداخلي `sqlite.libsql`).
+
+    NullPool في الحالتين: كل طلب يفتح اتصالاً جديداً، فلا تتنافس خيوط
+    gunicorn على اتصال واحد.
     """
     if settings.is_turso:
         try:
-            import sqlalchemy_libsql  # noqa: F401 — يسجّل dialect "libsql"
+            import sqlalchemy_libsql  # noqa: F401 — يسجّل dialect sqlite.libsql
         except ImportError as exc:
             raise RuntimeError(
                 "الاتصال بـ Turso يحتاج sqlalchemy-libsql. "

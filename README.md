@@ -1,3 +1,13 @@
+---
+title: PromptCraft
+emoji: ✍️
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # PromptCraft
 
 > حوّل وصفك النصي أو الصوتي إلى **برومبت احترافي مهيكلة**، جاهز للنسخ، لكل أدوات الذكاء الاصطناعي.
