@@ -42,8 +42,24 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     # نموذج تفريغ الصوت
     WHISPER_MODEL: str = "whisper-1"
-    # وضع التجربة: يُرجع نصًا وهميًا بدون اتصال بـ OpenAI (للاختبار فقط)
-    WHISPER_MOCK: bool = False
+    # وضع التجربة للتفريغ: true = نص وهمي بدون اتصال بـ OpenAI
+    # اجعلها false لتشغيل التفريغ الحقيقي (يتطلب OPENAI_API_KEY)
+    WHISPER_MOCK: bool = True
+
+    # ---- OpenRouter — محرك هندسة البرومبتات ----
+    # المفتاح من: https://openrouter.ai/keys
+    OPENROUTER_API_KEY: str = ""
+    # النموذج الافتراضي (مجاني على OpenRouter)
+    OPENROUTER_MODEL: str = "nvidia/nemotron-3-super-120b-a12b:free"
+    # نقطة النهاية المتوافقة مع OpenAI SDK
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    # ترويسات تُرسل مع كل طلب (إحصاءات OpenRouter + هوية التطبيق)
+    OPENROUTER_HTTP_REFERER: str = "https://promptcraft.app"
+    OPENROUTER_APP_TITLE: str = "PromptCraft"
+    # سقف زمني للاستجابة بالثواني (لحماية الواجهة من التعليق)
+    LLM_TIMEOUT_SECONDS: float = 60.0
+    # وضع التجربة: يُرجع برومبتًا قالبيًا بدون اتصال (للاختبار بدون مفتاح)
+    PROMPT_MOCK: bool = False
 
     # ---- الرفع الصوتي ----
     UPLOAD_DIR: Path = BASE_DIR / "data" / "uploads"
@@ -88,6 +104,11 @@ class Settings(BaseSettings):
     def openai_ready(self) -> bool:
         """هل يمكن استخدام OpenAI فعلًا؟"""
         return bool(self.OPENAI_API_KEY.strip())
+
+    @property
+    def openrouter_ready(self) -> bool:
+        """هل يمكن استخدام OpenRouter لتوليد البرومبتات؟"""
+        return bool(self.OPENROUTER_API_KEY.strip())
 
     def ensure_directories(self) -> None:
         """يتأكد من وجود المجلدات التي يحتاجها التطبيق قبل التشغيل."""

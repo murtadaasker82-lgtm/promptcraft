@@ -18,6 +18,7 @@ from app.database import SessionLocal, engine, init_db
 from app.models import User
 from app.routers.audio_router import router as audio_router
 from app.routers.auth_router import router as auth_router
+from app.routers.prompt_router import router as prompt_router
 
 # ---------------- التسجيل (logging) ----------------
 
@@ -61,6 +62,13 @@ async def lifespan(app: FastAPI):
         logger.info("OpenAI API Key: مضبوط — التفريغ الحقيقي متاح")
     else:
         logger.warning("OpenAI API Key: غير مضبوط — التفريغ الحقيقي معطّل حتى تضيفه في .env")
+
+    if settings.PROMPT_MOCK:
+        logger.warning("وضع التجربة مفعّل (PROMPT_MOCK=true): توليد البرومبتات وهمي بلا اتصال")
+    elif settings.openrouter_ready:
+        logger.info("OpenRouter: مفتاح مضبوط — النموذج %s متاح", settings.OPENROUTER_MODEL)
+    else:
+        logger.warning("OpenRouter: مفتاح غير مضبوط — توليد البرومبتات معطّل حتى تضيف OPENROUTER_API_KEY في .env")
     logger.info("حد الرفع: %s ميجابايت — الصيغ: %s",
                 settings.MAX_UPLOAD_MB, ", ".join(settings.ALLOWED_AUDIO_EXTENSIONS))
     yield
@@ -128,6 +136,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 app.include_router(auth_router)
 app.include_router(audio_router)
+app.include_router(prompt_router)
 
 
 @app.get("/api/health", tags=["meta"], summary="فحص صحة التطبيق")
@@ -148,6 +157,9 @@ def health() -> dict:
         "database": "ok" if db_ok else "error",
         "openai_configured": settings.openai_ready,
         "whisper_mock": settings.WHISPER_MOCK,
+        "openrouter_configured": settings.openrouter_ready,
+        "prompt_mock": settings.PROMPT_MOCK,
+        "openrouter_model": settings.OPENROUTER_MODEL,
         "uploads_dir": str(settings.UPLOAD_DIR),
         "max_upload_mb": settings.MAX_UPLOAD_MB,
     }
@@ -171,6 +183,14 @@ def api_index() -> dict:
             "audio": {
                 "transcribe": "POST /api/transcribe  (multipart: file)",
                 "info": "GET /api/transcribe/info",
+            },
+            "prompt": {
+                "generate": "POST /api/prompt/generate",
+                "enhance": "POST /api/prompt/enhance",
+                "frameworks": "GET /api/prompt/frameworks",
+                "suggest": "GET /api/prompt/suggest?text=...",
+                "history": "GET /api/prompt/history",
+                "clear_history": "DELETE /api/prompt/history",
             },
             "pages": {
                 "login": "GET /login",

@@ -99,3 +99,89 @@ class ErrorResponse(BaseModel):
 
     success: bool = False
     detail: str
+
+
+# ============================================================
+# محرك البرومبتات
+# ============================================================
+
+# الحروف العربية (أبجد + تشكيل + تاء مربوطة) — نتحقق منها في التحقق من اللغة.
+ARABIC_PATTERN = r"[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]"
+# الحد الأقصى للوصف الخام — يمنع استهلاك رصيد ضخم بطلب واحد.
+MAX_RAW_INPUT = 4000
+
+
+class PromptGenerateRequest(BaseModel):
+    """طلب توليد برومبت من وصف خام."""
+
+    input: str = Field(
+        ...,
+        min_length=3,
+        max_length=MAX_RAW_INPUT,
+        description="الوصف الخام الذي تريد تحويله إلى برومبت مهيكَل",
+        examples=["أريد مقال عن الذكاء الاصطناعي"],
+    )
+    tool: str = Field(
+        default="general",
+        max_length=32,
+        description="الأداة المستهدفة: chatgpt / claude / gemini / midjourney / cursor / general",
+    )
+    framework: str = Field(
+        default="co-star",
+        max_length=32,
+        description="الإطار: co-star / crispe / 5c",
+    )
+    language: str = Field(
+        default="ar",
+        max_length=8,
+        description="لغة البرومبت الناتج: ar أو en",
+    )
+    save: bool = Field(
+        default=True,
+        description="هل يُحفظ البرومبت في سجل المستخدم؟",
+    )
+
+    @field_validator("input")
+    @classmethod
+    def _validate_input(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 3:
+            raise ValueError("الوصف قصير جدًا — اكتب 3 أحرف على الأقل")
+        return value
+
+    @field_validator("language")
+    @classmethod
+    def _validate_language(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in ("ar", "en"):
+            raise ValueError("اللغة المدعومة: ar أو en")
+        return value
+
+
+class PromptEnhanceRequest(BaseModel):
+    """طلب تحسين برومبت موجود."""
+
+    prompt: str = Field(
+        ...,
+        min_length=5,
+        max_length=MAX_RAW_INPUT,
+        description="البرومبت الموجود الذي تريد تحسينه",
+    )
+    language: str = Field(
+        default="ar",
+        max_length=8,
+        description="لغة البرومبت المحسَّن: ar أو en",
+    )
+    save: bool = Field(default=False, description="هل يُحفظ في السجل؟")
+
+
+class SuggestFrameworkResponse(BaseModel):
+    """رد اقتراح الإطار."""
+
+    success: bool = True
+    text: str
+    framework: str
+    framework_name: str
+    reason_ar: str
+    confidence: float
+    alternatives: list[str]

@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Index, String
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -27,9 +27,46 @@ class User(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    prompts: Mapped[list["PromptHistory"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     def __repr__(self) -> str:
         return f"<User id={self.id} username={self.username!r}>"
+
+
+class PromptHistory(Base):
+    """سجل البرومبتات المولّدة — يحتفظ بالمدخل الخام والنتيجة."""
+
+    __tablename__ = "prompt_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    raw_input: Mapped[str] = mapped_column(Text, nullable=False)
+    generated_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    tool: Mapped[str] = mapped_column(String(32), nullable=False, default="general")
+    framework: Mapped[str] = mapped_column(String(32), nullable=False, default="co-star")
+    language: Mapped[str] = mapped_column(String(8), nullable=False, default="ar")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow,
+        nullable=False,
+        index=True,
+    )
+
+    user: Mapped["User"] = relationship(back_populates="prompts")
+
+    def __repr__(self) -> str:
+        return (
+            f"<PromptHistory id={self.id} user_id={self.user_id} "
+            f"tool={self.tool!r} framework={self.framework!r}>"
+        )
 
 
 class Session(Base):
