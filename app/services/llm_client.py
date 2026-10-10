@@ -1,9 +1,9 @@
 """
-عميل LLM موحّد عبر OpenRouter.
+عميل LLM موحّد — يمرّ كل استدعاء نموذج من هنا.
 
-OpenRouter يوفّر واجهة متوافقة مع OpenAI SDK، لذلك نستخدم `AsyncOpenAI` مع
-تغيير `base_url` فقط. كل استدعاء يمرّ من هنا حتى يكون مكان التعامل مع
-الأخطاء والمهل واحدًا لكل التطبيق.
+المزوّد هو Groq، وهو يوفّر واجهة متوافقة مع OpenAI SDK، لذلك نستخدم
+`AsyncOpenAI` مع تغيير `base_url` فقط. كل استدعاء يمرّ من هنا حتى يكون مكان
+التعامل مع الأخطاء والمهل واحدًا لكل التطبيق.
 
 مثال:
     from app.services.llm_client import chat_completion
@@ -54,27 +54,22 @@ class LLMError(Exception):
 
 def get_llm_client() -> AsyncOpenAI:
     """
-    يعيد عميل AsyncOpenAI مربوطًا بـ OpenRouter.
+    يعيد عميل AsyncOpenAI مربوطًا بـ Groq.
 
     يُنشأ مرة واحدة ويُعاد استخدامه (الاتصال محفوظ داخليًا في العميل).
     """
     global _client
     if _client is None:
         _client = AsyncOpenAI(
-            base_url=settings.OPENROUTER_BASE_URL,
-            api_key=settings.OPENROUTER_API_KEY,
-            timeout=settings.OPENROUTER_TIMEOUT,
+            base_url=settings.llm_base_url,
+            api_key=settings.llm_api_key,
+            timeout=settings.llm_timeout,
             max_retries=0,  # نتحكم بأنفسنا في إعادة المحاولة برسائل عربية
-            default_headers={
-                # مطلوبان لإحصاءات OpenRouter فقط، لكن نرسلهما دائمًا
-                "HTTP-Referer": settings.OPENROUTER_HTTP_REFERER,
-                "X-Title": settings.OPENROUTER_APP_TITLE,
-            },
         )
         logger.debug(
-            "تم إنشاء عميل OpenRouter (base_url=%s, model=%s)",
-            settings.OPENROUTER_BASE_URL,
-            settings.OPENROUTER_MODEL,
+            "تم إنشاء عميل Groq (base_url=%s, model=%s)",
+            settings.llm_base_url,
+            settings.llm_model,
         )
     return _client
 
@@ -97,20 +92,21 @@ def reset_llm_client() -> None:
 def _map_status_error(exc: APIStatusError, model: str | None = None) -> LLMError:
     """يحوّل خطأ HTTP من الخدمة إلى رسالة عربية مفهومة + رمز مناسب."""
     status = exc.status_code
-    attempted = model or settings.OPENROUTER_MODEL
+    attempted = model or settings.llm_model
+    provider = settings.llm_display_name
 
     if status in (401, 403):
         return LLMError(
-            "مفتاح OpenRouter غير صالح أو منتهي. افتح https://openrouter.ai/keys "
-            "وأنشئ مفتاحًا جديدًا ثم حدّث OPENROUTER_API_KEY في ملف .env.",
+            f"مفتاح {provider} غير صالح أو منتهي. افتح {settings.llm_keys_url} "
+            f"وأنشئ مفتاحًا جديدًا ثم حدّث {settings.llm_key_env} في ملف .env.",
             status_code=401,
             http_status=status,
         )
 
     if status == 402:
         return LLMError(
-            "رصيد حسابك في OpenRouter غير كافٍ لإتمام الطلب. "
-            "أضف رصيدًا أو استخدم نموذجًا مجانيًا ( ending بـ :free ).",
+            f"حسابك في {provider} غير مفعّل الفوترة أو رصيده غير كافٍ. "
+            "راجع خطة الحساب على https://console.groq.com/settings/billing",
             status_code=402,
             http_status=status,
         )
@@ -118,28 +114,28 @@ def _map_status_error(exc: APIStatusError, model: str | None = None) -> LLMError
     if status == 429:
         return LLMError(
             "تم تجاوز حد الاستخدام مؤقتًا (429). غالبًا لأن النموذج مزدحم أو "
-            "أن مفتاحك بلا رصيد. انتظر دقيقة ثم أعد المحاولة، أو غيّر النموذج.",
+            "أن حصة حسابك نفدت. انتظر دقيقة ثم أعد المحاولة، أو غيّر النموذج.",
             status_code=429,
             http_status=status,
         )
 
     if status == 404:
         return LLMError(
-            f"النموذج المطلوب غير موجود على OpenRouter: {attempted}. "
-            "تحقق من الاسم في https://openrouter.ai/models",
+            f"النموذج المطلوب غير موجود على {provider}: {attempted}. "
+            f"تحقق من الاسم في {settings.llm_models_url}",
             status_code=404,
             http_status=status,
         )
 
     if status >= 500:
         return LLMError(
-            "خدمة OpenRouter تواجه خطأ داخليًا مؤقتًا — أعد المحاولة بعد قليل.",
+            f"خدمة {provider} تواجه خطأ داخليًا مؤقتًا — أعد المحاولة بعد قليل.",
             status_code=502,
             http_status=status,
         )
 
     return LLMError(
-        f"رفضت OpenRouter الطلب (رمز {status}). راجع نص الطلب أو مفتاحك ثم أعد المحاولة.",
+        f"رفضت {provider} الطلب (رمز {status}). راجع نص الطلب أو مفتاحك ثم أعد المحاولة.",
         status_code=502,
         http_status=status,
     )
@@ -188,7 +184,7 @@ def _model_candidates(model: str) -> list[str]:
     ترتيب النماذج المُجرَّبة: الأساسي أولًا ثم قائمة الاحتياطية بلا تكرار.
     """
     chain = [model]
-    for raw in settings.OPENROUTER_MODELS_FALLBACK:
+    for raw in settings.llm_models_fallback:
         fallback = (raw or "").strip()
         if fallback and fallback not in chain:
             chain.append(fallback)
@@ -257,8 +253,9 @@ async def _call_model(
                 raise last_error from exc
             wait = 2**attempt + random.random()
             logger.warning(
-                "حد معدل من OpenRouter بعد %.2fث (model=%s) — إعادة المحاولة "
+                "حد معدل من %s بعد %.2fث (model=%s) — إعادة المحاولة "
                 "%s/%s بعد %.1fs",
+                settings.llm_display_name,
                 time.perf_counter() - started, model, attempt, max_attempts, wait,
             )
             await asyncio.sleep(wait)
@@ -269,7 +266,8 @@ async def _call_model(
                 raise last_error from exc
             wait = 1.5 * attempt
             logger.warning(
-                "خطأ 5xx من OpenRouter بعد %.2fث (model=%s) — إعادة المحاولة %s/%s",
+                "خطأ 5xx من %s بعد %.2fث (model=%s) — إعادة المحاولة %s/%s",
+                settings.llm_display_name,
                 time.perf_counter() - started, model, attempt, max_attempts,
             )
             await asyncio.sleep(wait)
@@ -284,20 +282,21 @@ async def _call_model(
 
         except APIConnectionError as exc:
             last_error = LLMError(
-                "تعذّر الاتصال بـ OpenRouter. تحقق من الإنترنت ثم أعد المحاولة.",
+                f"تعذّر الاتصال بـ {settings.llm_display_name}. تحقق من الإنترنت ثم أعد المحاولة.",
                 status_code=502,
             )
             if attempt == max_attempts:
                 raise last_error from exc
             logger.warning(
-                "فشل الاتصال بـ OpenRouter بعد %.2fث — إعادة المحاولة %s/%s",
+                "فشل الاتصال بـ %s بعد %.2fث — إعادة المحاولة %s/%s",
+                settings.llm_display_name,
                 time.perf_counter() - started, attempt, max_attempts,
             )
             await asyncio.sleep(1.5 * attempt)
 
         except APIError as exc:
             raise LLMError(
-                f"خطأ من عميل OpenRouter: {exc}",
+                f"خطأ من عميل {settings.llm_display_name}: {exc}",
                 status_code=502,
             ) from exc
 
@@ -316,7 +315,7 @@ async def chat_completion(
     يستدعي نموذج محادثة ويعيد نص الإجابة فقط.
 
     جرّب النموذج المطلوب أولًا، فإن فشل برمز من `RETRYABLE_MODEL_STATUSES`
-    انتقل تلقائيًا إلى بقية `OPENROUTER_MODELS_FALLBACK`.
+    انتقل تلقائيًا إلى بقية `llm_models_fallback`.
 
     :param messages: قائمة رسائل بصيغة OpenAI: [{"role": ..., "content": ...}]
     :param model: اسم النموذج؛ الافتراضي من الإعدادات
@@ -327,17 +326,18 @@ async def chat_completion(
     :returns: نص الإجابة بعد تنظيفه
     :raises LLMError: عند غياب المفتاح أو فشل كل النماذج
     """
-    if not settings.openrouter_ready:
+    if not settings.llm_ready:
         raise LLMError(
-            "مفتاح OpenRouter غير مضبوط. أضف OPENROUTER_API_KEY في ملف .env ثم أعد "
-            "تشغيل الخادم. (تجده في: https://openrouter.ai/keys)",
+            f"مفتاح {settings.llm_display_name} غير مضبوط. أضف "
+            f"{settings.llm_key_env} في ملف .env ثم أعد تشغيل الخادم. "
+            f"(تجده في: {settings.llm_keys_url})",
             status_code=503,
         )
 
     if not messages:
         raise LLMError("لا توجد رسائل لإرسالها", status_code=400)
 
-    model = model or settings.OPENROUTER_MODEL
+    model = model or settings.llm_model
     max_tokens = max_tokens or settings.PROMPT_MAX_TOKENS
     client = get_llm_client()
 

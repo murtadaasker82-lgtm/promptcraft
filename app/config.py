@@ -46,25 +46,23 @@ class Settings(BaseSettings):
     # اجعلها false لتشغيل التفريغ الحقيقي (يتطلب OPENAI_API_KEY)
     WHISPER_MOCK: bool = True
 
-    # ---- OpenRouter — محرك هندسة البرومبتات ----
-    # المفتاح من: https://openrouter.ai/keys
-    OPENROUTER_API_KEY: str = ""
-    # النموذج المستخدم لتوليد البرومبت.
-    # تحقّق حيّ (2026-10): النماذج المجانية الأخرى المرشّحة ترجع 404 — لا وجود
-    # لها على OpenRouter anymore. فنُبقي apodex وحده في الطليعة.
-    # راجع https://openrouter.ai/models إن أردت التغيير.
-    OPENROUTER_MODEL: str = "apodex/apodex-1.1-mini:free"
-    # سلسلة النماذج الاحتياطية — فارغة حاليًا لأن كل المرشّحين رجعوا 404،
-    # والآلية جاهزة: أضف أسماء هنا لتُجرَّب تلقائيًا عند 404/429/503.
-    # الصيغة في .env يجب أن تكون JSON مصفوفة.
-    OPENROUTER_MODELS_FALLBACK: list[str] = []
+# Groq هو المزوّد الوحيد: يقدّم واجهة متوافقة مع OpenAI SDK، فالتوليد
+    # يمرّ عبر `AsyncOpenAI` مع تغيير `base_url` فقط.
+    # المفتاح من: https://console.groq.com/keys
+    # الطبقة المجانية تكفي لتوليد البرومبتات، فلا يحتاج رصيدًا مُحمَّلًا.
+    GROQ_API_KEY: str = ""
     # نقطة النهاية المتوافقة مع OpenAI SDK
-    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
-    # ترويسات تُرسل مع كل طلب (إحصاءات OpenRouter + هوية التطبيق)
-    OPENROUTER_HTTP_REFERER: str = "https://promptcraft.app"
-    OPENROUTER_APP_TITLE: str = "PromptCraft"
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+    # النموذج المستخدم لتوليد البرومبت.
+    # راجع https://console.groq.com/docs/models لقائمة النماذج المتاحة.
+    # `llama-3.1-8b-instant` سريع جدًا ومناسب لهذه المهمة، فإن أردت جودة
+    # أعلى بدّلها إلى `llama-3.3-70b-versatile`.
+    GROQ_MODEL: str = "llama-3.1-8b-instant"
+    # سلسلة نماذج احتياطية — تُجرَّب بالترتيب عند فشل الأساسي بـ 404/429/503.
+    # الصيغة في .env يجب أن تكون JSON مصفوفة.
+    GROQ_MODELS_FALLBACK: list[str] = []
     # سقف زمني للاستجابة بالثواني (لحماية الواجهة من التعليق)
-    OPENROUTER_TIMEOUT: float = 60.0
+    GROQ_TIMEOUT: float = 60.0
     # وضع التجربة: يُرجع برومبتًا قالبيًا بدون اتصال (للاختبار بدون مفتاح)
     PROMPT_MOCK: bool = False
     # أقصى عدد رموز في مخرج النموذج — يحدّ زمن الاستجابة وحجم الرد
@@ -180,9 +178,60 @@ class Settings(BaseSettings):
         return self.DATABASE_URL.startswith("sqlite:///") and not self.is_turso
 
     @property
-    def openrouter_ready(self) -> bool:
-        """هل يمكن استخدام OpenRouter لتوليد البرومبتات؟"""
-        return bool(self.OPENROUTER_API_KEY.strip())
+    def groq_ready(self) -> bool:
+        """هل مفتاح Groq مضبوط؟"""
+        return bool(self.GROQ_API_KEY.strip())
+
+    # ---- صفات موجزة لمزوّد النماذج ----
+    #
+    # بقية التطبيق يقرأ `llm_*` بدل `GROQ_*` مباشرةً: هكذا تظل الرسائل
+    # ورسائل الخطأ في مكان واحد، ويبقى الانتقال إلى مزوّد آخر — لو عاد
+    # الطلب عليه يومًا — تغييرًا في هذا الكتلة وحدها.
+
+    @property
+    def llm_api_key(self) -> str:
+        return self.GROQ_API_KEY
+
+    @property
+    def llm_base_url(self) -> str:
+        return self.GROQ_BASE_URL
+
+    @property
+    def llm_model(self) -> str:
+        return self.GROQ_MODEL
+
+    @property
+    def llm_models_fallback(self) -> list[str]:
+        return self.GROQ_MODELS_FALLBACK
+
+    @property
+    def llm_timeout(self) -> float:
+        return self.GROQ_TIMEOUT
+
+    @property
+    def llm_ready(self) -> bool:
+        """هل يمكن استدعاء النموذج فعليًا؟ بوابة الجاهزية الوحيدة في التطبيق."""
+        return bool(self.llm_api_key.strip())
+
+    @property
+    def llm_display_name(self) -> str:
+        """اسم المزوّد كما يظهر للمستخدم في الرسائل والسجلّات."""
+        return "Groq"
+
+    @property
+    def llm_key_env(self) -> str:
+        """اسم متغيّر البيئة الذي يحمل المفتاح — تذكره رسالة الخطأ للمستخدم."""
+        return "GROQ_API_KEY"
+
+    @property
+    def llm_keys_url(self) -> str:
+        """صفحة إنشاء المفتاح."""
+        return "https://console.groq.com/keys"
+
+    @property
+    def llm_models_url(self) -> str:
+        """صفحة قائمة النماذج — تظهر في رسالة خطأ 404."""
+        return "https://console.groq.com/docs/models"
 
     def ensure_directories(self) -> None:
         """يتأكد من وجود المجلدات التي يحتاجها التطبيق قبل التشغيل."""

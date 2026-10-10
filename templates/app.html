@@ -40,7 +40,9 @@
             transcribe_ready: {{ transcribe_ready | tojson }},
             prompt_ready: {{ prompt_ready | tojson }},
             prompt_mock: {{ prompt_mock | tojson }},
-            openrouter_model: {{ openrouter_model | tojson }},
+            llm_model: {{ llm_model | tojson }},
+            llm_provider_name: {{ llm_provider_name | tojson }},
+            llm_key_env: {{ llm_key_env | tojson }},
         };
     </script>
 
@@ -172,7 +174,7 @@
         </svg>
         <p class="text-sm text-rose-200 leading-relaxed">
             <span class="font-semibold">محرك البرومبتات غير مضبوط.</span>
-            أضف <code class="text-rose-100">OPENROUTER_API_KEY</code> في ملف
+            أضف <code class="text-rose-100">{{ llm_key_env }}</code> في ملف
             <code class="text-rose-100">.env</code> ثم أعد تشغيل الخادم.
         </p>
     </div>

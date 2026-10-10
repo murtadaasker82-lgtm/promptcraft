@@ -270,11 +270,11 @@ promptcraft/
 |---|---|---|
 | `DATABASE_URL` | `sqlite+libsql://<host>?authToken=<token>&secure=true` | **الأهم — انظر التحذير أدناه** |
 | `SECRET_KEY` | قيمة عشوائية طويلة | ثابت بين النشرات وإلا بطلت كل الجلسات |
-| `OPENROUTER_API_KEY` | من openrouter.ai/keys | بدونه توليد البرومبتات معطّل |
+| `GROQ_API_KEY` | من console.groq.com/keys | بدونه توليد البرومبتات معطّل |
 | `OPENAI_API_KEY` | من platform.openai.com | اختياري إن كنت تستخدم `WHISPER_MOCK=false` |
 | `COOKIE_SECURE` | `true` | إلزامي على HTTPS |
 | `WHISPER_MOCK` | `true` للتجربة بلا OpenAI | |
-| `PROMPT_MOCK` | `false` | يحتاج `OPENROUTER_API_KEY` |
+| `PROMPT_MOCK` | `false` | يحتاج `GROQ_API_KEY` |
 
 ### ⚠️ صيغة `DATABASE_URL` — سبب معظم الأعطال
 

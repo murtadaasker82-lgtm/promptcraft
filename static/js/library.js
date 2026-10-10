@@ -86,7 +86,7 @@ function libraryApp() {
     return {
         // ---- من إعدادات الصفحة ----
         auth_user: LIB_CFG.user || { username: '—' },
-        model: LIB_CFG.openrouter_model || '—',
+        model: LIB_CFG.llm_model || '—',
         prefill: LIB_CFG.prefill || null,
 
         // ---- القوائم (نفس معرّفات المحرك) ----

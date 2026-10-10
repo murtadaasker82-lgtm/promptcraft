@@ -16,8 +16,9 @@ services:
       # سلسلة مفصولة بفواصل. بدّلها بنطاقك الحقيقي قبل الإطلاق.
       - key: CORS_ORIGINS
         value: "*"
-      - key: OPENROUTER_MODEL
-        value: apodex/apodex-1.1-mini:free
+      # مفتاح Groq يُضبط من لوحة Render ولا يوضع هنا
+      - key: GROQ_MODEL
+        value: llama-3.1-8b-instant
       - key: PROMPT_MOCK
         value: "false"
       - key: WHISPER_MOCK

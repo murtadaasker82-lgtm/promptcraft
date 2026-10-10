@@ -66,8 +66,8 @@ def _owned_prompt(db: OrmSession, prompt_id: int, user: User) -> PromptHistory:
     responses={
         401: {"description": "يجب تسجيل الدخول"},
         400: {"description": "الوصف فارغ أو غير صالح"},
-        502: {"description": "فشل الاتصال بـ OpenRouter"},
-        503: {"description": "مفتاح OpenRouter غير مضبوط"},
+        502: {"description": "فشل الاتصال بمزوّد النموذج"},
+        503: {"description": "مفتاح مزوّد النموذج غير مضبوط"},
     },
 )
 async def generate(
@@ -128,8 +128,8 @@ async def generate(
     summary="تحسين برومبت موجود",
     responses={
         401: {"description": "يجب تسجيل الدخول"},
-        502: {"description": "فشل الاتصال بـ OpenRouter"},
-        503: {"description": "مفتاح OpenRouter غير مضبوط"},
+        502: {"description": "فشل الاتصال بمزوّد النموذج"},
+        503: {"description": "مفتاح مزوّد النموذج غير مضبوط"},
     },
 )
 async def enhance(
@@ -160,12 +160,13 @@ async def enhance(
             "history_id": None,
         }
 
-    if not settings.openrouter_ready:
+    if not settings.llm_ready:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
-                "مفتاح OpenRouter غير مضبوط. أضف OPENROUTER_API_KEY في ملف .env ثم "
-                "أعد تشغيل الخادم. (تجده في: https://openrouter.ai/keys)"
+                f"مفتاح {settings.llm_display_name} غير مضبوط. أضف "
+                f"{settings.llm_key_env} في ملف .env ثم أعد تشغيل الخادم. "
+                f"(تجده في: {settings.llm_keys_url})"
             ),
         )
 
@@ -197,7 +198,7 @@ async def enhance(
     try:
         improved_text = await chat_completion(
             messages=messages,
-            model=settings.OPENROUTER_MODEL,
+            model=settings.llm_model,
             temperature=0.5,
         )
     except LLMError as exc:
@@ -230,7 +231,7 @@ async def enhance(
         "language": payload.language,
         "mock_used": False,
         "tokens_used": max(1, round(len(improved) / 4)),
-        "model": settings.OPENROUTER_MODEL,
+        "model": settings.llm_model,
         "saved": saved,
         "history_id": history_id,
     }
@@ -246,8 +247,8 @@ def frameworks(current_user: User = Depends(get_current_user)) -> dict:
         "default_framework": DEFAULT_FRAMEWORK,
         "default_tool": "general",
         "mock_mode": settings.PROMPT_MOCK,
-        "ready": settings.openrouter_ready or settings.PROMPT_MOCK,
-        "model": "mock" if settings.PROMPT_MOCK else settings.OPENROUTER_MODEL,
+        "ready": settings.llm_ready or settings.PROMPT_MOCK,
+        "model": "mock" if settings.PROMPT_MOCK else settings.llm_model,
         "frameworks": list_frameworks(),
         "tools": list_tools(),
     }
@@ -271,7 +272,7 @@ def suggest(
     """
     تحلّل الكلمات المفتاحية في النص وتقترح الإطار الأنسب.
 
-    سريع ومحلي بالكامل — بلا اتصال بـ OpenRouter.
+    سريع ومحلي بالكامل — بلا أي اتصال بالشبكة.
     """
     suggestion = suggest_framework(text)
     logger.info(
@@ -362,7 +363,7 @@ def _mock_enhance(prompt: str) -> str:
     lines.append("")
     lines.append(
         f"> هذا التحسين في وضع التجربة (`PROMPT_MOCK=true`). فعّله "
-        f"`false` في `.env` لتحسين حقيقي عبر OpenRouter."
+        f"`false` في `.env` لتحسين حقيقي عبر {settings.llm_display_name}."
     )
     return "\n".join(lines)
 

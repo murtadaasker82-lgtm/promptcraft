@@ -1,4 +1,4 @@
-"""اختبارات سلسلة النماذج الاحتياطية في عميل OpenRouter."""
+﻿"""اختبارات سلسلة النماذج الاحتياطية في عميل Groq."""
 
 import asyncio
 
@@ -21,12 +21,12 @@ def run(coro):
 def ready(monkeypatch):
     """يمرّر فحص المفتاح دون اتصال فعلي."""
     monkeypatch.setattr(
-        llm_client.settings, "OPENROUTER_API_KEY", "sk-or-v1-test", raising=False
+        llm_client.settings, "GROQ_API_KEY", "gsk-test", raising=False
     )
     monkeypatch.setattr(
         llm_client.settings,
-        "OPENROUTER_MODELS_FALLBACK",
-        ["fallback-a:free", "fallback-b:free"],
+        "GROQ_MODELS_FALLBACK",
+        ["fallback-a", "fallback-b"],
         raising=False,
     )
     monkeypatch.setattr(llm_client, "get_llm_client", lambda: object())
@@ -38,14 +38,14 @@ def ready(monkeypatch):
 
 
 def test_candidates_put_primary_first(ready):
-    assert _model_candidates("main:free") == ["main:free", "fallback-a:free", "fallback-b:free"]
+    assert _model_candidates("main") == ["main", "fallback-a", "fallback-b"]
 
 
 def test_candidates_deduplicate(ready):
     """النموذج الأساسي إن كان في القائمة لا يتكرّر."""
-    assert _model_candidates("fallback-a:free") == [
-        "fallback-a:free",
-        "fallback-b:free",
+    assert _model_candidates("fallback-a") == [
+        "fallback-a",
+        "fallback-b",
     ]
 
 
@@ -53,11 +53,11 @@ def test_candidates_skip_empty_entries(monkeypatch, ready):
     """الإدخال الفارغ في القائمة يُتجاهل ولا يصير اسم نموذج."""
     monkeypatch.setattr(
         llm_client.settings,
-        "OPENROUTER_MODELS_FALLBACK",
-        ["", "fallback-b:free", "   "],
+        "GROQ_MODELS_FALLBACK",
+        ["", "fallback-b", "   "],
         raising=False,
     )
-    assert _model_candidates("main:free") == ["main:free", "fallback-b:free"]
+    assert _model_candidates("main") == ["main", "fallback-b"]
 
 
 def test_retryable_set_contains_expected_codes():
@@ -82,10 +82,10 @@ def test_falls_back_on_retryable_status(monkeypatch, ready, http_status):
 
     monkeypatch.setattr(llm_client, "_call_model", fake)
 
-    text = run(chat_completion(messages=[{"role": "user", "content": "x"}], model="main:free"))
+    text = run(chat_completion(messages=[{"role": "user", "content": "x"}], model="main"))
 
     assert text == "رد ناجح"
-    assert tried == ["main:free", "fallback-a:free"]
+    assert tried == ["main", "fallback-a"]
 
 
 def test_uses_mapped_status_503_not_displayed_502(monkeypatch, ready):
@@ -100,10 +100,10 @@ def test_uses_mapped_status_503_not_displayed_502(monkeypatch, ready):
 
     monkeypatch.setattr(llm_client, "_call_model", fake)
 
-    text = run(chat_completion(messages=[{"role": "user", "content": "x"}], model="main:free"))
+    text = run(chat_completion(messages=[{"role": "user", "content": "x"}], model="main"))
 
     assert text == "نجح آخر نموذج"
-    assert tried == ["main:free", "fallback-a:free", "fallback-b:free"]
+    assert tried == ["main", "fallback-a", "fallback-b"]
 
 
 def test_does_not_fall_back_on_auth_error(monkeypatch, ready):
@@ -117,10 +117,10 @@ def test_does_not_fall_back_on_auth_error(monkeypatch, ready):
     monkeypatch.setattr(llm_client, "_call_model", fake)
 
     with pytest.raises(LLMError) as exc:
-        run(chat_completion(messages=[{"role": "user", "content": "x"}], model="main:free"))
+        run(chat_completion(messages=[{"role": "user", "content": "x"}], model="main"))
 
     assert exc.value.status_code == 401
-    assert tried == ["main:free"]
+    assert tried == ["main"]
 
 
 def test_raises_last_error_when_all_models_fail(monkeypatch, ready):
@@ -134,10 +134,10 @@ def test_raises_last_error_when_all_models_fail(monkeypatch, ready):
     monkeypatch.setattr(llm_client, "_call_model", fake)
 
     with pytest.raises(LLMError) as exc:
-        run(chat_completion(messages=[{"role": "user", "content": "x"}], model="main:free"))
+        run(chat_completion(messages=[{"role": "user", "content": "x"}], model="main"))
 
     assert exc.value.http_status == 404
-    assert tried == ["main:free", "fallback-a:free", "fallback-b:free"]
+    assert tried == ["main", "fallback-a", "fallback-b"]
 
 
 def test_empty_response_does_not_trigger_fallback(monkeypatch, ready):
@@ -151,6 +151,6 @@ def test_empty_response_does_not_trigger_fallback(monkeypatch, ready):
     monkeypatch.setattr(llm_client, "_call_model", fake)
 
     with pytest.raises(LLMError):
-        run(chat_completion(messages=[{"role": "user", "content": "x"}], model="main:free"))
+        run(chat_completion(messages=[{"role": "user", "content": "x"}], model="main"))
 
-    assert tried == ["main:free"]
+    assert tried == ["main"]

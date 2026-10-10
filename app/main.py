@@ -73,10 +73,16 @@ async def lifespan(app: FastAPI):
 
     if settings.PROMPT_MOCK:
         logger.warning("وضع التجربة مفعّل (PROMPT_MOCK=true): توليد البرومبتات وهمي بلا اتصال")
-    elif settings.openrouter_ready:
-        logger.info("OpenRouter: مفتاح مضبوط — النموذج %s متاح", settings.OPENROUTER_MODEL)
+    elif settings.llm_ready:
+        logger.info(
+            "%s: مفتاح مضبوط — النموذج %s متاح",
+            settings.llm_display_name, settings.llm_model,
+        )
     else:
-        logger.warning("OpenRouter: مفتاح غير مضبوط — توليد البرومبتات معطّل حتى تضيف OPENROUTER_API_KEY في .env")
+        logger.warning(
+            "%s: مفتاح غير مضبوط — توليد البرومبتات معطّل حتى تضيف %s في .env",
+            settings.llm_display_name, settings.llm_key_env,
+        )
     logger.info("حد الرفع: %s ميجابايت — الصيغ: %s",
                 settings.MAX_UPLOAD_MB, ", ".join(settings.ALLOWED_AUDIO_EXTENSIONS))
     if settings.BACKUP_ENABLED:
@@ -170,9 +176,9 @@ def health() -> dict:
         "database": "ok" if db_ok else "error",
         "openai_configured": settings.openai_ready,
         "whisper_mock": settings.WHISPER_MOCK,
-        "openrouter_configured": settings.openrouter_ready,
         "prompt_mock": settings.PROMPT_MOCK,
-        "openrouter_model": settings.OPENROUTER_MODEL,
+        "groq_configured": settings.groq_ready,
+        "groq_model": settings.GROQ_MODEL,
         "backup_enabled": settings.BACKUP_ENABLED,
         "uploads_dir": str(settings.UPLOAD_DIR),
         "max_upload_mb": settings.MAX_UPLOAD_MB,
@@ -236,9 +242,11 @@ def _render(request: Request, name: str, context: dict):
         "allowed_extensions": settings.ALLOWED_AUDIO_EXTENSIONS,
         "transcribe_ready": settings.openai_ready or settings.WHISPER_MOCK,
         "whisper_mock": settings.WHISPER_MOCK,
-        "prompt_ready": settings.openrouter_ready or settings.PROMPT_MOCK,
+        "prompt_ready": settings.llm_ready or settings.PROMPT_MOCK,
         "prompt_mock": settings.PROMPT_MOCK,
-        "openrouter_model": "mock" if settings.PROMPT_MOCK else settings.OPENROUTER_MODEL,
+        "llm_model": "mock" if settings.PROMPT_MOCK else settings.llm_model,
+        "llm_provider_name": settings.llm_display_name,
+        "llm_key_env": settings.llm_key_env,
     }
     base_context.update(context)
     return templates.TemplateResponse(request=request, name=name, context=base_context)

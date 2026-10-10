@@ -264,5 +264,5 @@ def test_health_reports_prompt_config(client):
     data = client.get("/api/health").json()
 
     assert "prompt_mock" in data
-    assert "openrouter_configured" in data
-    assert data["openrouter_model"] == settings.OPENROUTER_MODEL
+    assert "groq_configured" in data
+    assert data["groq_model"] == settings.GROQ_MODEL

@@ -7,7 +7,7 @@
         ↓  TOOL_TEMPLATES  (لمن سيُكتب؟ ChatGPT/Claude/Midjourney/…)
         ↓  FRAMEWORKS      (بأي هيكل؟ CO-STAR/CRISPE/5C)
         ↓  SYSTEM_PROMPT   (تعليمات النموذج)
-        ↓  OpenRouter      (النموذج يولّد الـ Markdown)
+        ↓  Groq            (النموذج يولّد الـ Markdown)
         ↓
     برومبت جاهز للنسخ
 
@@ -220,6 +220,13 @@ def framework_sections_text(framework: str) -> str:
 # ============================================================
 # ج) تعليمات النظام
 # ============================================================
+#
+# هذه التعليمات مزوّد-محايدة عن قصد: نماذج Groq متوافقة مع OpenAI وتقبل دور
+# `system` تمامًا، فالنص نفسه يصلح لها ولأي مزوّد آخر بلا تكييف.
+#
+# القواعد مرتّبة من الأهم للأقل، والقاعدة الأخيرة تحديدًا مكرّرة عمدًا: النماذج
+# الأصغر (مثل llama-3.1-8b) أكثر ميلًا لفتح الرد بسور كود أو بجملة تمهيدية.
+# `_strip_preamble` ينظّف ذلك لاحقًا، لكن منعه من الأساس أرخص من التنظيف.
 
 SYSTEM_PROMPT = """\
 أنت مهندس برومبتات. حوّل وصف المستخدم الخام إلى برومبت مهيكل جاهز للاستخدام فورًا.
@@ -230,6 +237,8 @@ SYSTEM_PROMPT = """\
 2. اجعل القابل للتنفيذ أولويتك: أرقام وحدود وتواريخ وأسماء بدل العبارات المبهمة.
 3. أعد البرومبت وحده بصيغة Markdown — بلا مقدمة ولا شرح ولا تعليق على الوصف.
 4. اكتب باللغة المطلوبة كما وردت في التعليمات (عربية أو إنجليزية).
+5. لا تفتح ردّك بسور كود ولا بعلامة ```، ولا تسبق أول عنوان بجملة مثل
+   "إليك البرومبت" أو "بالطبع". ابدأ مباشرةً بعنوان القسم الأول.
 """
 
 SYSTEM_PROMPT_EN = """\
@@ -243,6 +252,8 @@ Mandatory rules:
 2. Prefer the executable: real numbers, limits, dates and names over vague wording.
 3. Return only the prompt as Markdown — no preamble, no commentary, no critique.
 4. Write in the requested language (Arabic or English).
+5. Do not wrap the answer in a code fence, do not open with ``` and do not
+   prepend a sentence like "Here's your prompt". Start at the first heading.
 """
 
 
@@ -331,7 +342,7 @@ def _estimate_tokens(text: str) -> int:
     تقدير تقريبي لعدد الـ tokens (نحو 4 حروف لكل token).
 
     تقدير يكفي للعرض في وضع التجربة. في الوضع الحقيقي نُبقيه أيضًا تقريبًا
-    لأن استدعاء OpenRouter يُرجع usage لكن واجهتنا تعرض تقديرًا موحّدًا.
+    لأن استدعاء النموذج يُرجع usage لكن واجهتنا تعرض تقديرًا موحّدًا.
     """
     return max(1, round(len(text) / 4))
 
@@ -353,13 +364,14 @@ def _mock_prompt(raw_input: str, tool: str, framework: str, language: str) -> st
             f"> **وضع التجربة** — هذا برومبت نموذجي مبني على قالب "
             f"`{framework_spec['name_ar']}` لأداة {tool_spec['name_ar']}، وليس "
             f"مولّدًا من نموذج. فعّل `PROMPT_MOCK=false` في ملف `.env` للحصول على "
-            f"برومبت حقيقي من OpenRouter."
+            f"برومبت حقيقي من {settings.llm_display_name}."
         )
     else:
         banner = (
             f"> **Mock mode** — a template prompt for `{framework_spec['name_ar']}` "
             f"/ {tool_spec['name_ar']}, not model-generated. Set "
-            f"`PROMPT_MOCK=false` in `.env` for real OpenRouter output."
+            f"`PROMPT_MOCK=false` in `.env` for real "
+            f"{settings.llm_display_name} output."
         )
 
     parts = [banner, "", f"# {subject}", ""]
@@ -509,10 +521,11 @@ async def generate_prompt(
         )
         prompt_text = _mock_prompt(raw_input, tool, framework, language)
     else:
-        if not settings.openrouter_ready:
+        if not settings.llm_ready:
             raise LLMError(
-                "مفتاح OpenRouter غير مضبوط. أضف OPENROUTER_API_KEY في ملف .env ثم "
-                "أعد تشغيل الخادم. (تجده في: https://openrouter.ai/keys)",
+                f"مفتاح {settings.llm_display_name} غير مضبوط. أضف "
+                f"{settings.llm_key_env} في ملف .env ثم أعد تشغيل الخادم. "
+                f"(تجده في: {settings.llm_keys_url})",
                 status_code=503,
             )
 
@@ -528,12 +541,12 @@ async def generate_prompt(
         ]
 
         logger.info(
-            "استدعاء OpenRouter — النموذج %s، إطار %s، أداة %s",
-            settings.OPENROUTER_MODEL, framework, tool,
+            "استدعاء %s — النموذج %s، إطار %s، أداة %s",
+            settings.llm_display_name, settings.llm_model, framework, tool,
         )
         raw_text = await chat_completion(
             messages=messages,
-            model=settings.OPENROUTER_MODEL,
+            model=settings.llm_model,
             temperature=0.7,
         )
         prompt_text = _strip_preamble(raw_text)
@@ -547,7 +560,7 @@ async def generate_prompt(
         "language": language,
         "mock_used": use_mock,
         "tokens_used": _estimate_tokens(prompt_text),
-        "model": "mock" if use_mock else settings.OPENROUTER_MODEL,
+        "model": "mock" if use_mock else settings.llm_model,
         "cached": False,
     }
 

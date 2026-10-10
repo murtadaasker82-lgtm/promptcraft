@@ -45,7 +45,7 @@ window.PC = {
     transcribeReady: CFG.transcribe_ready !== false,
     promptReady: CFG.prompt_ready !== false,
     promptMock: Boolean(CFG.prompt_mock),
-    model: CFG.openrouter_model || '—',
+    model: CFG.llm_model || '—',
     tools: TOOLS_FALLBACK,
     frameworks: FRAMEWORKS_FALLBACK,
 };
@@ -78,8 +78,8 @@ async function readError(response) {
         415: 'نوع الملف غير مدعوم',
         429: 'النموذج مزدحم — انتظر قليلًا ثم أعد المحاولة',
         500: 'خطأ في الخادم',
-        502: 'فشل الاتصال بخدمة OpenRouter',
-        503: 'مفتاح OpenRouter غير مضبوط',
+        502: 'فشل الاتصال بمزوّد النموذج',
+        503: 'مفتاح مزوّد النموذج غير مضبوط',
     };
 
     return byStatus[response.status] || `خطأ في الخادم (${response.status})`;
