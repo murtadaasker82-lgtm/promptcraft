@@ -3,14 +3,18 @@
 import pytest
 
 from app.config import Settings
-from app.database import _normalize_libsql_url
 
 TURSO_HOST = "promptcraft-x.aws-us-west-2.turso.io"
 TOKEN = "eyJhbGciOi.TOKEN.sig"
 
 
+def resolve(url: str) -> str:
+    """`resolved_database_url` هي المكان الوحيد الذي يطبّع الرابط."""
+    return Settings(DATABASE_URL=url).resolved_database_url
+
+
 # ============================================================
-# أ) التحويل في database._normalize_libsql_url
+# أ) التطبيع في config.Settings.resolved_database_url
 # ============================================================
 
 
@@ -41,7 +45,7 @@ TOKEN = "eyJhbGciOi.TOKEN.sig"
 )
 def test_libsql_scheme_is_promoted_to_sqlite_plus_libsql(raw, expected):
     """`libsql://` تُرقّى إلى `sqlite+libsql://` مع ضمان `secure=true`."""
-    assert _normalize_libsql_url(raw) == expected
+    assert resolve(raw) == expected
 
 
 @pytest.mark.parametrize(
@@ -53,7 +57,7 @@ def test_libsql_scheme_is_promoted_to_sqlite_plus_libsql(raw, expected):
 )
 def test_already_correct_scheme_is_left_alone(raw):
     """`sqlite+libsql://` تُمرَّر كما هي، وتُضاف secure فقط إن غابت."""
-    result = _normalize_libsql_url(raw)
+    result = resolve(raw)
     assert result.startswith("sqlite+libsql://")
     assert result.count("secure=") == 1
     assert "secure=true" in result
@@ -65,21 +69,24 @@ def test_already_correct_scheme_is_left_alone(raw):
         "sqlite:///./data/promptcraft.db",
         "sqlite:///:memory:",
         "sqlite+aiosqlite:///./data/promptcraft.db",
+        "postgresql://user:pw@localhost:5432/db",
     ],
 )
-def test_local_sqlite_urls_pass_through_untouched(raw):
-    """روابط SQLite المحلية لا تُمسّ إطلاقًا."""
-    assert _normalize_libsql_url(raw) == raw
+def test_local_sqlite_and_unknown_urls_pass_through_untouched(raw):
+    """روابط SQLite المحلية وأي مخطط آخر لا تُمسّ إطلاقًا."""
+    assert resolve(raw) == raw
+
+
+# ============================================================
+# ب) الضمان الحاسم: لا يخرج wss:// أبدًا
+# ============================================================
 
 
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
         # خطأ لوحة النشر: رابط websocket بدل مخطط SQLAlchemy
-        (
-            f"wss://{TURSO_HOST}",
-            f"sqlite+libsql://{TURSO_HOST}?secure=true",
-        ),
+        (f"wss://{TURSO_HOST}", f"sqlite+libsql://{TURSO_HOST}?secure=true"),
         (
             f"wss://{TURSO_HOST}?authToken={TOKEN}",
             f"sqlite+libsql://{TURSO_HOST}?authToken={TOKEN}&secure=true",
@@ -97,19 +104,14 @@ def test_local_sqlite_urls_pass_through_untouched(raw):
 )
 def test_websocket_url_is_repaired_to_sqlalchemy_scheme(raw, expected):
     """`wss://` و `ws://` يُصلَحان إلى `sqlite+libsql://` مع TLS إجباري."""
-    assert _normalize_libsql_url(raw) == expected
+    assert resolve(raw) == expected
 
 
 def test_ws_url_never_downgrades_to_plaintext():
     """`secure=false` لا تبقى بعد إصلاح رابط websocket — التوكن مشفَّر دائماً."""
-    result = _normalize_libsql_url(f"ws://{TURSO_HOST}?authToken={TOKEN}&secure=false")
+    result = resolve(f"ws://{TURSO_HOST}?authToken={TOKEN}&secure=false")
     assert "secure=false" not in result
     assert "secure=true" in result
-
-
-# ============================================================
-# ب) الضمان الحاسم: لا يخرج wss:// أبدًا
-# ============================================================
 
 
 @pytest.mark.parametrize(
@@ -125,17 +127,17 @@ def test_ws_url_never_downgrades_to_plaintext():
 )
 def test_output_never_becomes_a_websocket_url(raw):
     """
-    `wss://` وجهة اتصال يبنيها الـ driver من `secure=true`، لا مخطط
-    تقبله `create_engine`. لو مرّرناه لـ SQLAlchemy لانهار بخطأ
+    رابط websocket هو وجهة النقل التي يبنيها الـ driver من `secure=true`،
+    ولا مخطط تقبله `create_engine` — لو مرّرناه لانهار بخطأ
     `Can't load plugin: sqlalchemy.dialects:wss`. هذا الاختبار هو الحارس
-    الذي يمنع عودتها إلى `database.py` أو `config.py`.
+    الذي يمنع عودته من `config.py` إلى `database.py` أو العكس.
     """
-    result = _normalize_libsql_url(raw)
+    result = resolve(raw)
     assert not result.startswith(("wss://", "ws://")), result
 
 
 # ============================================================
-# ج) config: التصنيف والـ resolved URL
+# ج) config: التصنيف
 # ============================================================
 
 
@@ -144,10 +146,11 @@ def test_output_never_becomes_a_websocket_url(raw):
     [
         f"libsql://{TURSO_HOST}?authToken={TOKEN}",
         f"sqlite+libsql://{TURSO_HOST}?authToken={TOKEN}",
+        f"wss://{TURSO_HOST}?authToken={TOKEN}",
     ],
 )
-def test_is_turso_detects_both_schemes(raw):
-    """كلا المخططين يصفان اتصال Turso السحابي لا ملفًا محليًا."""
+def test_is_turso_detects_every_remote_scheme(raw):
+    """كل مخططات Turso السحابية — بما فيها المغلوط — تصفّها كـ Turso."""
     settings = Settings(DATABASE_URL=raw)
     assert settings.is_turso is True
     assert settings.is_sqlite is False
@@ -162,23 +165,6 @@ def test_is_sqlite_only_for_file_paths():
     assert settings.database_backend == "sqlite"
 
 
-def test_wss_url_is_classified_as_turso_and_repaired():
-    """
-    رابط `wss://` المغلوط يجب أن يصنّفه الكود كـ Turso فيدخل فرع
-    Turso، ويصلحه `database.py`. قبل هذا كانت `is_turso` خاطئةً له فلا
-    يُصحَّح ولا يُستخدم، فيمرّ `wss://` خامًا إلى `create_engine` وينهار.
-    """
-    settings = Settings(DATABASE_URL=f"wss://{TURSO_HOST}?authToken={TOKEN}")
-    assert settings.is_turso is True
-    assert settings.is_sqlite is False
-    assert settings.database_backend == "turso"
-    # resolved لا تُصلح (دورها تمرير)، لكن database.py يفعل
-    assert settings.resolved_database_url == f"wss://{TURSO_HOST}?authToken={TOKEN}"
-    assert _normalize_libsql_url(settings.resolved_database_url).startswith(
-        "sqlite+libsql://"
-    )
-
-
 def test_unknown_scheme_is_neither_turso_nor_sqlite():
     """
     رابط `postgresql://` مثلاً لا يصنّفه الكود كـ Turso ولا كملف محلي،
@@ -190,15 +176,17 @@ def test_unknown_scheme_is_neither_turso_nor_sqlite():
     assert settings.database_backend == "postgresql"
 
 
-@pytest.mark.parametrize(
-    "raw",
-    [
-        f"libsql://{TURSO_HOST}?authToken={TOKEN}",
-        f"sqlite+libsql://{TURSO_HOST}?authToken={TOKEN}&secure=true",
-        "sqlite:///./data/promptcraft.db",
-    ],
-)
-def test_resolved_database_url_never_yields_wss(raw):
-    """الدالة تمرّر الرابط بلا تحويل، فلا تُنتج `wss://` ولا `ws://`."""
-    resolved = Settings(DATABASE_URL=raw).resolved_database_url
-    assert not resolved.startswith(("wss://", "ws://")), resolved
+# ============================================================
+# د) database.py لا يطبّع — يمرّر ناتج config كما هو
+# ============================================================
+
+
+def test_database_module_does_not_reimplement_normalization():
+    """
+    التطبيع في مكان واحد فقط. لو نُسخت هنا لأمكن أن تنحرف إحدى
+    النسختين عن الأخرى،的后果 قيمة قاعدة بيانات مختلفة في الإنتاج
+    بلا أي اختبار يلحظ.
+    """
+    from app import database
+
+    assert not hasattr(database, "_normalize_libsql_url")
