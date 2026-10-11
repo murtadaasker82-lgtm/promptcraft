@@ -1,13 +1,9 @@
 """إعدادات التطبيق — تُقرأ من ملف .env أو من متغيرات البيئة."""
 
-import logging
-import re
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-logger = logging.getLogger(__name__)
 
 # مسار جذر المشروع (المجلد الذي يحتوي على مجلد app)
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -136,58 +132,39 @@ class Settings(BaseSettings):
         هي **المكان الوحيد** الذي يُطبَّع فيه الرابط. `database.py` يمرّر
         ناتجها إلى `create_engine` كما هو، بلا أي تحويل إضافي.
 
-            # محليًا (افتراضي) — يُمرَّر كما هو
+            # تطوير محلي — يُمرَّر كما هو
             DATABASE_URL=sqlite:///./data/promptcraft.db
 
-            # إنتاج — Turso عبر libSQL
-            DATABASE_URL=sqlite+libsql://<host>?authToken=<token>&secure=true
+            # إنتاج — Turso
+            DATABASE_URL=sqlite+libsql://<host>.turso.io?authToken=<token>&secure=true
 
-        القواعد المطبَّقة:
+        النطاق المدعوم في المشروع لا يتجاوز هذين:
 
         * `sqlite+libsql://` — يمرّ كما هو، مع ضمان `secure=true`.
         * `libsql://`        — تُرقّى إلى `sqlite+libsql://`، مع ضمان
           `secure=true`.
         * `sqlite:///`       — ملف محلي، يُمرَّر كما هو بلا لمس.
-        * أي مخطط آخر        — يُمرَّر كما هو. لا نفترض ما لا نعرفه.
+        * أي مخطط آخر        — يُمرَّر كما هو بلا لمس. لا نفترض ما لا نعرفه،
+          و`create_engine` هو من يرفض ما لا يعرفه.
 
         لماذا `sqlite+libsql://` بالذات؟ لأن `sqlalchemy-libsql` يسجّل
         الـ dialect باسم `sqlite.libsql`، وهو المخطط الوحيد الذي تقبله
         `create_engine` — فأي مخطط آخر ينهار عند إنشاء المحرّك.
 
         **`secure=true` مطلوبة:** بدونها يختار الـ driver نقل البيانات عبر
-        `ws://` غير مشفّر، أي أن `authToken` يُرسل في اتصال مكشوف.
+        قناة غير مشفّرة، أي أن `authToken` يُرسل في اتصال مكشوف.
         """
         url = self.DATABASE_URL.strip()
-        from_ws = False
 
         if url.startswith("sqlite+libsql://"):
             fixed = url
         elif url.startswith("libsql://"):
             fixed = "sqlite+libsql://" + url[len("libsql://"):]
-        elif url.startswith(("wss://", "ws://")):
-            # رابط websocket وصل بالخطأ إلى لوحة النشر. هو وجهة النقل
-            # التي يبنيها الـ driver من secure=true، لا مخطط تقبله
-            # SQLAlchemy — فنترجمه إلى المخطط الصحيح بدل الانهيار.
-            from_ws = True
-            scheme, _, rest = url.partition("://")
-            fixed = "sqlite+libsql://" + rest
-            logger.warning(
-                "DATABASE_URL بدأ بـ %s:// وهو رابط websocket لا مخطط SQLAlchemy؛ "
-                "تم تصحيحه تلقائياً إلى sqlite+libsql://. "
-                "الأصحّ تصحيح القيمة في لوحة النشر إلى: "
-                "sqlite+libsql://<db>.<region>.turso.io?authToken=<token>&secure=true",
-                scheme,
-            )
         else:
             # ملفات SQLite المحلية وأي مخطط آخر — بلا لمس
             return url
 
-        if from_ws:
-            # ws:// يعني فضح authToken — نرفعها إلى TLS بغضّ النظر عمّا كُتب
-            fixed = re.sub(r"secure=(?:true|false)", "secure=true", fixed)
-            if "secure=" not in fixed:
-                fixed += "&secure=true" if "?" in fixed else "?secure=true"
-        elif "secure=" not in fixed:
+        if "secure=" not in fixed:
             fixed += "&secure=true" if "?" in fixed else "?secure=true"
         return fixed
 
@@ -205,14 +182,11 @@ class Settings(BaseSettings):
         """
         هل الاتصال بقاعدة Turso السحابية لا بملف SQLite محلي؟
 
-        `libsql://` و `sqlite+libsql://` هما الصيغتان المعتمدتان. نضيف
-        `wss://` و `ws://` لأنهما وجهة الاتصال التي يبنيها الـ driver نفسه،
-        وقد تُلصقان بالخطأ في لوحة النشر — وبلا إدراجهما هنا كانت
-        `is_turso` خاطئةً فلا يدخل فرع Turso أصلاً ولا تُصحَّح القيمة.
+        `libsql://` و `sqlite+libsql://` هما الصيغتان المعتمدتان وحدهما؛
+        أي مخطط آخر لا يُعدّ Turso، فيرفضه `create_engine` صراحةً بدل أن
+        نترجمه بصمت إلى صيغة لم يطلبها صاحب الإعداد.
         """
-        return self.DATABASE_URL.startswith(
-            ("libsql://", "sqlite+libsql://", "wss://", "ws://")
-        )
+        return self.DATABASE_URL.startswith(("libsql://", "sqlite+libsql://"))
 
     @property
     def is_sqlite(self) -> bool:

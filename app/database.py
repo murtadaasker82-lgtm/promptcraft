@@ -1,6 +1,5 @@
 """اتصال قاعدة البيانات — SQLite محليًا أو Turso (libSQL) في الإنتاج."""
 
-import logging
 from collections.abc import Generator
 
 from sqlalchemy import create_engine, event
@@ -9,8 +8,6 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import NullPool
 
 from app.config import settings
-
-logger = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):

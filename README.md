@@ -278,27 +278,36 @@ promptcraft/
 
 ### ⚠️ صيغة `DATABASE_URL` — سبب معظم الأعطال
 
-الصيغة المعتمدة هي **`sqlite+libsql://`**، وليست `libsql://` ولا `wss://`:
+**النطاق المدعوم في المشروع هو صيغتان فقط، لا ثالثة:**
 
-| الصيغة | النتيجة |
+| البيئة | القيمة |
 |---|---|
-| `sqlite+libsql://host?authToken=X&secure=true` | ✅ يعمل |
-| `libsql://host?authToken=X` | يُصحَّح تلقائيًا في `database.py` |
-| `wss://host?authToken=X` | يُصحَّح تلقائيًا مع تحذير في السجلّ |
+| تطوير محلي | `DATABASE_URL=sqlite:///./data/promptcraft.db` |
+| **إنتاج (Turso)** | `DATABASE_URL=sqlite+libsql://<db>.<region>.turso.io?authToken=<token>&secure=true` |
 
-السبب أن `sqlalchemy-libsql` يسجّل الـ dialect باسم `sqlite.libsql`، وهذا هو
-المخطط الوحيد الذي تقبله `create_engine`. و `wss://` هو وجهة الاتصال التي
-يبنيها الـ driver من `secure=true`، وليس مخططاً تقبله SQLAlchemy.
+```
+sqlite+libsql://promptcraft-murtadaasker82-lgtm.aws-us-west-2.turso.io?authToken=<token>&secure=true
+```
 
-رابط `ws://` (غير مشفّر) يُرفَع إلى `secure=true` تلقائياً حتى لا يُرسل
-`authToken` في اتصال مكشوف — عدا ذلك نتعامل مع `secure=false` المكتوبة
-في `sqlite+libsql://` كما هي، لأنها اختيار صريح.
+**ما يفعله `config.resolved_database_url`** — وهو المكان الوحيد الذي يُطبَّع فيه الرابط:
 
-> **بعد التصحيح التلقائي، صحّح القيمة في لوحة النشر.** التطبيق يواصل
-> العمل، لكن بقاء التنبيه في السجلّ يعني أن سبب العطل بشري في الإعداد.
+| المُدخل | النتيجة |
+|---|---|
+| `sqlite:///xxx` | بلا تغيير |
+| `libsql://xxx` | `sqlite+libsql://xxx` مع إضافة `secure=true` إن غابت |
+| `sqlite+libsql://xxx` | بلا تغيير (و`secure` تُحترم كما كُتبت) |
+| أي مخطط آخر | بلا تغيير — و`create_engine` يرفضه برسالة واضحة |
 
-**`secure=true` مطلوبة.** بدونها يربط الـ driver عبر `ws://` غير مشفّر، أي أن
-`authToken` يُرسل في اتصال مكشوف.
+السبب أن `sqlalchemy-libsql` يسجّل الـ dialect باسم `sqlite.libsql`، وهو
+المخطط الوحيد الذي تقبله `create_engine`.
+
+**`secure=true` مطلوبة**، وبدونها يختار الـ driver قناة غير مشفّرة فيُرسل
+`authToken` مكشوفاً. المخطط الذي تختاره هو **ما** يُنقل، أما التشفّر فيُقرّره
+`secure` وحدها.
+
+> **انسخ القيمة أعلاه حرفياً.** أي صيغة أخرى — بما فيها رابط websocket —
+> ترفضها `create_engine` بالاسم، والمشروع لا يترجمها بصمت إلى صيغة
+> لم تطلبها. التصحيح يكون في لوحة النشر.
 
 ### SQLite المحلي
 
