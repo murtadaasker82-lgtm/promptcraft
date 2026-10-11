@@ -55,9 +55,9 @@ class Settings(BaseSettings):
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
     # النموذج المستخدم لتوليد البرومبت.
     # راجع https://console.groq.com/docs/models لقائمة النماذج المتاحة.
-    # `llama-3.1-8b-instant` سريع جدًا ومناسب لهذه المهمة، فإن أردت جودة
-    # أعلى بدّلها إلى `llama-3.3-70b-versatile`.
-    GROQ_MODEL: str = "llama-3.1-8b-instant"
+    # `openai/gpt-oss-20b` هو البديل الرسمي لـ `llama-3.1-8b-instant` الذي
+    # أُوقف على Groq (404 model decommissioned) للحسابات المجانية.
+    GROQ_MODEL: str = "openai/gpt-oss-20b"
     # سلسلة نماذج احتياطية — تُجرَّب بالترتيب عند فشل الأساسي بـ 404/429/503.
     # الصيغة في .env يجب أن تكون JSON مصفوفة.
     GROQ_MODELS_FALLBACK: list[str] = []

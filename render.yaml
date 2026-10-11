@@ -18,7 +18,7 @@ services:
         value: "*"
       # مفتاح Groq يُضبط من لوحة Render ولا يوضع هنا
       - key: GROQ_MODEL
-        value: llama-3.1-8b-instant
+        value: openai/gpt-oss-20b
       - key: PROMPT_MOCK
         value: "false"
       - key: WHISPER_MOCK
