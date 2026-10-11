@@ -284,11 +284,18 @@ promptcraft/
 |---|---|
 | `sqlite+libsql://host?authToken=X&secure=true` | ✅ يعمل |
 | `libsql://host?authToken=X` | يُصحَّح تلقائيًا في `database.py` |
-| `wss://host` | ❌ `NoSuchModuleError` |
+| `wss://host?authToken=X` | يُصحَّح تلقائيًا مع تحذير في السجلّ |
 
 السبب أن `sqlalchemy-libsql` يسجّل الـ dialect باسم `sqlite.libsql`، وهذا هو
 المخطط الوحيد الذي تقبله `create_engine`. و `wss://` هو وجهة الاتصال التي
 يبنيها الـ driver من `secure=true`، وليس مخططاً تقبله SQLAlchemy.
+
+رابط `ws://` (غير مشفّر) يُرفَع إلى `secure=true` تلقائياً حتى لا يُرسل
+`authToken` في اتصال مكشوف — عدا ذلك نتعامل مع `secure=false` المكتوبة
+في `sqlite+libsql://` كما هي، لأنها اختيار صريح.
+
+> **بعد التصحيح التلقائي، صحّح القيمة في لوحة النشر.** التطبيق يواصل
+> العمل، لكن بقاء التنبيه في السجلّ يعني أن سبب العطل بشري في الإعداد.
 
 **`secure=true` مطلوبة.** بدونها يربط الـ driver عبر `ws://` غير مشفّر، أي أن
 `authToken` يُرسل في اتصال مكشوف.

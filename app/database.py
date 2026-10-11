@@ -1,5 +1,7 @@
 """اتصال قاعدة البيانات — SQLite محليًا أو Turso (libSQL) في الإنتاج."""
 
+import logging
+import re
 from collections.abc import Generator
 
 from sqlalchemy import create_engine, event
@@ -8,6 +10,8 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import NullPool
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -28,15 +32,38 @@ def _normalize_libsql_url(url: str) -> str:
 
     `secure=true`: يختار الـ driver بين `ws://` و `wss://`. نضيفها
     تلقائياً إن غابت حتى لا يمرّر أحد بيانات اعتماد Turso مشفّرة.
+
+    `wss://` و `ws://` تُقابَلان هنا إصلاحاً ذاتياً: هما ما يبنيه الـ driver
+    من `secure=true`، وقد يلصقهما أحدهم في لوحة النشر — وهما لا يقبلهما
+    SQLAlchemy إطلاقاً (ينهاران بـ `Can't load plugin:
+    sqlalchemy.dialects:wss`). نترجمهما إلى `sqlite+libsql://` ونُجبر
+    `secure=true` حتى لا يمرّر `authToken` عبر `ws://` غير مشفّر.
     """
+    from_ws = False
     if url.startswith("sqlite+libsql://"):
         fixed = url
     elif url.startswith("libsql://"):
         fixed = "sqlite+libsql://" + url[len("libsql://"):]
+    elif url.startswith(("wss://", "ws://")):
+        from_ws = True
+        scheme, _, rest = url.partition("://")
+        fixed = "sqlite+libsql://" + rest
+        logger.warning(
+            "DATABASE_URL بدأ بـ %s:// وهو رابط websocket لا مخطط SQLAlchemy؛ "
+            "تم تصحيحه تلقائياً إلى sqlite+libsql://. "
+            "الأصحّ تصحيح القيمة في لوحة النشر إلى: "
+            "sqlite+libsql://<db>.<region>.turso.io?authToken=<token>&secure=true",
+            scheme,
+        )
     else:
         return url
 
-    if "secure=" not in fixed:
+    if from_ws:
+        # ws:// يعني فضح authToken — نرفعها إلى TLS بغضّ النظر عمّا كُتب
+        fixed = re.sub(r"secure=(?:true|false)", "secure=true", fixed)
+        if "secure=" not in fixed:
+            fixed += "&secure=true" if "?" in fixed else "?secure=true"
+    elif "secure=" not in fixed:
         fixed += "&secure=true" if "?" in fixed else "?secure=true"
     return fixed
 

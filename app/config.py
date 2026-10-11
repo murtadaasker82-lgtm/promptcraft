@@ -162,10 +162,14 @@ class Settings(BaseSettings):
         """
         هل الاتصال بقاعدة Turso السحابية لا بملف SQLite محلي؟
 
-        `libsql://` مدرجة هنا لأنها تحدّد سلوك التطبيق (نسخ احتياطي، pragmas)،
-        حتى لو كان الرابط نفسه غير صالح لـ SQLAlchemy — تعالجه `database.py`.
+        `libsql://` و `sqlite+libsql://` هما الصيغتان المعتمدتان. نضيف
+        `wss://` و `ws://` لأنهما وجهة الاتصال التي يبنيها الـ driver نفسه،
+        وقد تُلصقان بالخطأ في لوحة النشر — وبلا إدراجهما هنا كانت
+        `is_turso` خاطئةً فلا يدخل فرع Turso أصلاً ولا تُصحَّح القيمة.
         """
-        return self.DATABASE_URL.startswith(("libsql://", "sqlite+libsql://"))
+        return self.DATABASE_URL.startswith(
+            ("libsql://", "sqlite+libsql://", "wss://", "ws://")
+        )
 
     @property
     def is_sqlite(self) -> bool:
